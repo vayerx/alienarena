@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -18,7 +18,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 #include "g_local.h"
-
 
 qboolean	Pickup_Weapon (edict_t *ent, edict_t *other);
 void		Use_Weapon (edict_t *ent, gitem_t *inv);
@@ -181,778 +180,6 @@ qboolean Pickup_Powerup (edict_t *ent, edict_t *other)
 
 	return true;
 }
-//Vehicles
-void Use_Jet ( edict_t *ent)
-{
-    
-    /*jetpack in inventory but no fuel time? must be one of the
-      give all/give jetpack cheats, so put fuel in*/
-    if ( ent->client->Jet_remaining == 0 )
-      ent->client->Jet_remaining = 700;  
-
-    if ( Jet_Active(ent) ) 
-      ent->client->Jet_framenum = 0; 
-    else
-      ent->client->Jet_framenum = level.framenum + ent->client->Jet_remaining;
-    
-    gi.sound( ent, CHAN_ITEM, gi.soundindex("vehicles/got_in.wav"), 0.8, ATTN_NORM, 0 );
-
-    /*this is the sound played when flying. To here this sound 
-      immediately we play it here the first time*/
-    gi.sound ( ent, CHAN_AUTO, gi.soundindex("hover/hovidle1.wav"), 0.8, ATTN_NORM, 0 );
-}
-static void VehicleThink(edict_t *ent)
-{
-	ent->nextthink = level.time + FRAMETIME;
-}
-void VehicleSetup (edict_t *ent)
-{
-	trace_t		tr;
-	vec3_t		dest;
-	float		*v;
-
-	v = tv(-64,-64,-24);
-	VectorCopy (v, ent->mins);
-	v = tv(64,64,64);
-	VectorCopy (v, ent->maxs);
-
-	if (ent->model)
-		gi.setmodel (ent, ent->model);
-	else
-		gi.setmodel (ent, ent->item->world_model);
-
-	if(!strcmp(ent->classname, "item_bomber"))
-		ent->s.modelindex3 = gi.modelindex("vehicles/bomber/helmet.md2");
-
-	if(!strcmp(ent->classname, "item_hover"))
-		ent->s.modelindex3 = gi.modelindex("vehicles/hover/flames.md2");
-
-	ent->solid = SOLID_TRIGGER;
-	ent->movetype = MOVETYPE_TOSS;  
-	ent->touch = Touch_Item;
-
-	v = tv(0,0,-128);
-	VectorAdd (ent->s.origin, v, dest);
-
-	tr = gi.trace (ent->s.origin, ent->mins, ent->maxs, dest, ent, MASK_SOLID);
-	if (tr.startsolid)
-	{
-		gi.dprintf ("VehicleSetup: %s startsolid at %s\n", ent->classname, vtos(ent->s.origin));
-		G_FreeEdict (ent);
-		return;
-	}
-
-	VectorCopy (tr.endpos, ent->s.origin);
-
-	gi.linkentity (ent);
-
-	ent->nextthink = level.time + FRAMETIME;
-	ent->think = VehicleThink;
-}
-
-void ResetVehicle()//this function returns vehicle to base when player purposely drops it
-{
-	char *c;
-	edict_t *ent;
-
-	c = "item_bomber";
-	
-	ent = NULL;
-	while ((ent = G_Find (ent, FOFS(classname), c)) != NULL) {
-		if (ent->spawnflags & DROPPED_ITEM)
-			G_FreeEdict(ent);
-		else {
-			ent->svflags &= ~SVF_NOCLIENT;
-			ent->solid = SOLID_TRIGGER;
-			gi.linkentity(ent);
-			ent->s.event = EV_ITEM_RESPAWN;
-		}
-	}
-	
-	c = "item_strafer";
-	
-	ent = NULL;
-	while ((ent = G_Find (ent, FOFS(classname), c)) != NULL) {
-		if (ent->spawnflags & DROPPED_ITEM)
-			G_FreeEdict(ent);
-		else {
-			ent->svflags &= ~SVF_NOCLIENT;
-			ent->solid = SOLID_TRIGGER;
-			gi.linkentity(ent);
-			ent->s.event = EV_ITEM_RESPAWN;
-		}
-	}
-
-	c = "item_hover";
-	
-	ent = NULL;
-	while ((ent = G_Find (ent, FOFS(classname), c)) != NULL) {
-		if (ent->spawnflags & DROPPED_ITEM)
-			G_FreeEdict(ent);
-		else {
-			ent->svflags &= ~SVF_NOCLIENT;
-			ent->solid = SOLID_TRIGGER;
-			gi.linkentity(ent);
-			ent->s.event = EV_ITEM_RESPAWN;
-		}
-	}
-	safe_bprintf(PRINT_HIGH, "Vehicle has been returned!\n");
-}
-
-static void VehicleDropTouch(edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
-{
-	//owner (who dropped us) can't touch for two secs
-	if (other == ent->owner && 
-		ent->nextthink - level.time > 2)
-		return;
-
-	Touch_Item (ent, other, plane, surf);
-}
-
-static void VehicleDropThink(edict_t *ent)
-{
-	//let it hang around for awhile
-	ent->nextthink = level.time + 20;
-	ent->think = G_FreeEdict;
-}
-
-void VehicleDeadDrop(edict_t *self)
-{
-	edict_t *dropped = NULL;
-	gitem_t *vehicle;
-
-	dropped = NULL;
-	
-	vehicle = FindItemByClassname("item_bomber"); 
-	
-	if (self->client->pers.inventory[ITEM_INDEX(vehicle)]) {
-		dropped = Drop_Item(self, vehicle);
-		self->client->pers.inventory[ITEM_INDEX(vehicle)] = 0;
-		safe_bprintf(PRINT_HIGH, "Bomber is abandoned!\n");
-	}
-
-	if (dropped) {
-		dropped->think = VehicleDropThink;
-		dropped->nextthink = level.time + 5;
-		dropped->touch = VehicleDropTouch;
-		dropped->s.frame = 0;
-		return;
-	}
-	//didn't find a bomber, try a strafer
-	vehicle = FindItemByClassname("item_strafer"); 
-	
-	if (self->client->pers.inventory[ITEM_INDEX(vehicle)]) {
-		dropped = Drop_Item(self, vehicle);
-		self->client->pers.inventory[ITEM_INDEX(vehicle)] = 0;
-		safe_bprintf(PRINT_HIGH, "Strafer is abandoned!\n");
-	}
-
-	if (dropped) {
-		dropped->think = VehicleDropThink;
-		dropped->nextthink = level.time + 5;
-		dropped->touch = VehicleDropTouch;
-		dropped->s.frame = 0;
-		return;
-	}
-	//didn't find a strafer, try a hovercraft
-	vehicle = FindItemByClassname("item_hover"); 
-	
-	if (self->client->pers.inventory[ITEM_INDEX(vehicle)]) {
-		dropped = Drop_Item(self, vehicle);
-		self->client->pers.inventory[ITEM_INDEX(vehicle)] = 0;
-		safe_bprintf(PRINT_HIGH, "Hovercraft is abandoned!\n");
-	}
-
-	if (dropped) {
-		dropped->think = VehicleDropThink;
-		dropped->nextthink = level.time + 5;
-		dropped->touch = VehicleDropTouch;
-		dropped->s.frame = 0;
-		return;
-	}
-
-}
-void Reset_player(edict_t *ent)
-{
-	char		userinfo[MAX_INFO_STRING];
-	int		i, done;
-	char playermodel[MAX_OSPATH] = " ";
-	char playerskin[MAX_INFO_STRING] = " ";
-	char modelpath[MAX_OSPATH] = " ";
-	FILE *file;
-	char *s;
-
-	//set everything back
-	if(instagib->value)
-		ent->client->newweapon = FindItem("Alien Disruptor");
-	else if(rocket_arena->value)
-		ent->client->newweapon = FindItem("Rocket Launcher");
-	else
-		ent->client->newweapon = FindItem("blaster");
-		  		
-	memcpy (userinfo, ent->client->pers.userinfo, sizeof(userinfo));
-	s = Info_ValueForKey (userinfo, "skin");
-			
-	i = 0;
-	done = false;
-	strcpy(playermodel, " ");
-	while(!done)
-	{
-	  	if((s[i] == '/') || (s[i] == '\\'))
-			done = true;
-		playermodel[i] = s[i];
-		if(i > 62)
-			done = true;
-		i++;
-	}
-	playermodel[i-1] = 0;
-		  
-	ent->s.modelindex = 255;
-
-	sprintf(modelpath, "data1/players/%s/helmet.md2", playermodel);
-	Q2_FindFile (modelpath, &file); //does a helmet exist?
-	if(file) {
-	   	sprintf(modelpath, "players/%s/helmet.md2", playermodel);
-		ent->s.modelindex3 = gi.modelindex(modelpath);
-		fclose(file);
-	}
-	else 
-	   	ent->s.modelindex3 = 0;
-			
-	ent->s.modelindex4 = 0;
-	if(!strcmp(playermodel, "war")) //special case
-	{
-	   	ent->s.modelindex4 = gi.modelindex("players/war/weapon.md2");
-		ent->s.modelindex2 = 0;
-	}
-	else if(!strcmp(playermodel, "brainlet"))	
-		ent->s.modelindex4 = gi.modelindex("players/brainlet/gunrack.md2"); //brainlets have a mount
-	
-}
-qboolean Leave_vehicle(edict_t *ent, gitem_t *item) 
-{
-	Reset_player(ent);
-	
-	ent->client->Jet_framenum = level.framenum;
-		
-	ent->client->pers.inventory[ITEM_INDEX(item)] = 0;
-
-	gi.sound( ent, CHAN_ITEM, gi.soundindex("vehicles/got_in.wav"), 0.8, ATTN_NORM, 0 );
-
-	ResetVehicle();
-
-	return true;
-}
-
-qboolean Get_in_vehicle (edict_t *ent, edict_t *other)
-{
-	
-	gitem_t *vehicle; 
-	gitem_t *bomber;
-	gitem_t *strafer;
-	gitem_t *hover;
-
-	float		*v;
-
-	vehicle = NULL;
-
-    //check for any vehicles, if we have one, don't get in another
-	bomber = FindItemByClassname("item_bomber");
-	strafer = FindItemByClassname("item_strafer");
-	hover = FindItemByClassname("item_hover");
-	if((other->client->pers.inventory[ITEM_INDEX(bomber)] == 1) || (other->client->pers.inventory[ITEM_INDEX(strafer)] == 1)
-		|| (other->client->pers.inventory[ITEM_INDEX(hover)] == 1))
-		return false;
-	
-	vehicle = FindItemByClassname(ent->classname);
-
-	// get in the vehicle
-	if(other->client->pers.inventory[ITEM_INDEX(vehicle)] == 1)
-		return false; //can't get in a vehicle if you're already in one!
-
-	//put him in the vehicle
-	if(!strcmp(ent->classname, "item_bomber")) {
-		other->s.modelindex = gi.modelindex("vehicles/bomber/tris.md2");
-		other->s.modelindex2 = 0;
-		other->s.modelindex3 = gi.modelindex("vehicles/bomber/helmet.md2");
-		other->s.modelindex4 = 0;
-	}
-	else if(!strcmp(ent->classname, "item_hover")) {
-		other->s.modelindex = gi.modelindex("vehicles/hover/tris.md2");
-		other->s.modelindex2 = 0;
-		other->s.modelindex3 = gi.modelindex("vehicles/hover/flames.md2");
-		other->s.modelindex4 = 0;
-	}
-	else {
-		other->s.modelindex = gi.modelindex("vehicles/strafer/tris.md2");
-		other->s.modelindex2 = 0;
-		other->s.modelindex3 = 0;
-		other->s.modelindex4 = 0;
-	}
-	other->in_vehicle = true;
-	other->client->Jet_remaining = 500;
-
-	v = tv(-64,-64,-24);
-	VectorCopy (v,other->mins);
-	v = tv(64,64,64);
-	VectorCopy (v, other->maxs);
-	other->s.origin[2] +=24;
-	
-	other->client->pers.inventory[ITEM_INDEX(vehicle)] = 1;
-	other->client->newweapon = ent->item;
-	
-	if (!(ent->spawnflags & DROPPED_ITEM)) {
-		SetRespawn (ent, 60);
-	}
-	
-	Use_Jet(other);
-
-	return true;
-}
-
-//CTF 
-static void CTFFlagThink(edict_t *ent)
-{
-	if (ent->solid != SOLID_NOT)
-		ent->s.frame = 173 + (((ent->s.frame - 173) + 1) % 16);
-	ent->nextthink = level.time + FRAMETIME;
-}
-void CTFFlagSetup (edict_t *ent)
-{
-	trace_t		tr;
-	vec3_t		dest;
-	float		*v;
-
-	v = tv(-15,-15,-15);
-	VectorCopy (v, ent->mins);
-	v = tv(15,15,15);
-	VectorCopy (v, ent->maxs);
-
-	if (ent->model)
-		gi.setmodel (ent, ent->model);
-	else
-		gi.setmodel (ent, ent->item->world_model);
-	ent->solid = SOLID_TRIGGER;
-	ent->movetype = MOVETYPE_TOSS;  
-	ent->touch = Touch_Item;
-
-	v = tv(0,0,-128);
-	VectorAdd (ent->s.origin, v, dest);
-
-	tr = gi.trace (ent->s.origin, ent->mins, ent->maxs, dest, ent, MASK_SOLID);
-	if (tr.startsolid)
-	{
-		gi.dprintf ("CTFFlagSetup: %s startsolid at %s\n", ent->classname, vtos(ent->s.origin));
-		G_FreeEdict (ent);
-		return;
-	}
-
-	VectorCopy (tr.endpos, ent->s.origin);
-
-	gi.linkentity (ent);
-
-	ent->nextthink = level.time + FRAMETIME;
-	ent->think = CTFFlagThink;
-}
-void CTFEffects(edict_t *player)
-{
-	gitem_t *flag1_item, *flag2_item;
-
-	flag1_item = FindItemByClassname("item_flag_red");
-	flag2_item = FindItemByClassname("item_flag_blue");
-
-	if (player->client->pers.inventory[ITEM_INDEX(flag1_item)])
-		player->s.modelindex4 = gi.modelindex("models/items/flags/flag1.md2");
-	else if (player->client->pers.inventory[ITEM_INDEX(flag2_item)])
-		player->s.modelindex4 = gi.modelindex("models/items/flags/flag2.md2");
-	else
-		player->s.modelindex4 = 0;
-}
-qboolean CTFDrop_Flag(edict_t *ent, gitem_t *item)
-{
-	if (rand() & 1) 
-		safe_cprintf(ent, PRINT_HIGH, "Only lusers drop flags.\n");
-	else
-		safe_cprintf(ent, PRINT_HIGH, "Winners don't drop flags.\n");
-	return false;
-}
-void CTFResetFlag(int ctf_team)
-{
-	char *c;
-	edict_t *ent;
-
-	switch (ctf_team) {
-	case RED_TEAM:
-		c = "item_flag_red";
-		break;
-	case BLUE_TEAM:
-		c = "item_flag_blue";
-		break;
-	default:
-		return;
-	}
-
-	ent = NULL;
-	while ((ent = G_Find (ent, FOFS(classname), c)) != NULL) {
-		if (ent->spawnflags & DROPPED_ITEM)
-			G_FreeEdict(ent);
-		else {
-			ent->svflags &= ~SVF_NOCLIENT;
-			ent->solid = SOLID_TRIGGER;
-			gi.linkentity(ent);
-			ent->s.event = EV_ITEM_RESPAWN;
-		}
-	}
-}
-
-void CTFResetFlags(void)
-{
-	CTFResetFlag(RED_TEAM);
-	CTFResetFlag(BLUE_TEAM);
-}
-static void CTFDropFlagTouch(edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
-{
-	//owner (who dropped us) can't touch for two secs
-	if (other == ent->owner && 
-		ent->nextthink - level.time > 28)
-		return;
-
-	Touch_Item (ent, other, plane, surf);
-}
-static void CTFDropFlagThink(edict_t *ent)
-{
-	// auto return the flag
-	// reset flag will remove ourselves
-	if (strcmp(ent->classname, "item_flag_red") == 0) {
-		CTFResetFlag(RED_TEAM);
-		safe_bprintf(PRINT_HIGH, "The %s flag has returned!\n",
-			"Red");
-	} else if (strcmp(ent->classname, "item_flag_blue") == 0) {
-		CTFResetFlag(BLUE_TEAM);
-		safe_bprintf(PRINT_HIGH, "The %s flag has returned!\n",
-			"Blue");
-	}
-
-}
-void CTFDeadDropFlag(edict_t *self)
-{
-	edict_t *dropped = NULL;
-	gitem_t *flag1_item, *flag2_item;
-
-	dropped = NULL;
-	flag1_item = flag2_item = NULL;
-
-	flag1_item = FindItemByClassname("item_flag_red");
-	flag2_item = FindItemByClassname("item_flag_blue");
-
-	if (self->client->pers.inventory[ITEM_INDEX(flag1_item)]) {
-		dropped = Drop_Item(self, flag1_item);
-		self->client->pers.inventory[ITEM_INDEX(flag1_item)] = 0;
-		safe_bprintf(PRINT_HIGH, "%s lost the %s flag!\n",
-			self->client->pers.netname, "Red");
-	} else if (self->client->pers.inventory[ITEM_INDEX(flag2_item)]) {
-		dropped = Drop_Item(self, flag2_item);
-		self->client->pers.inventory[ITEM_INDEX(flag2_item)] = 0;
-		safe_bprintf(PRINT_HIGH, "%s lost the %s flag!\n",
-			self->client->pers.netname, "Blue");
-	}
-
-	if (dropped) {
-		dropped->think = CTFDropFlagThink;
-		dropped->nextthink = level.time + 30;
-		dropped->touch = CTFDropFlagTouch;
-		dropped->s.frame = 175;
-		dropped->s.effects = EF_ROTATE;
-	}
-}
-qboolean CTFPickup_Flag (edict_t *ent, edict_t *other)
-{
-	int ctf_team;
-	char team_name[16] = " ";
-	char enemy_team_name[16] = " ";
-	gitem_t *flag_item, *enemy_flag_item;
-
-	// figure out what team this flag is
-	if (strcmp(ent->classname, "item_flag_red") == 0)
-		ctf_team = RED_TEAM;
-	else if (strcmp(ent->classname, "item_flag_blue") == 0)
-		ctf_team = BLUE_TEAM;
-	else {
-		safe_cprintf(ent, PRINT_HIGH, "Don't know what team the flag is on.\n");
-		return false;
-	}
-
-// same team, if the flag at base, check to he has the enemy flag
-	if (ctf_team == RED_TEAM) {
-		flag_item = FindItemByClassname("item_flag_red");
-		enemy_flag_item = FindItemByClassname("item_flag_blue");
-		strcpy(team_name, "Red");
-		strcpy(enemy_team_name, "Blue");
-	} else {
-		flag_item = FindItemByClassname("item_flag_blue");
-		enemy_flag_item = FindItemByClassname("item_flag_red");
-		strcpy(team_name, "Blue");
-		strcpy(enemy_team_name, "Red");
-	}
-
-	if (ctf_team == other->dmteam) {
-
-		if (!(ent->spawnflags & DROPPED_ITEM)) {
-			// the flag is at home base.  if the player has the enemy
-			// flag, he's just won!
-
-			if (other->client->pers.inventory[ITEM_INDEX(enemy_flag_item)]) {
-				safe_bprintf(PRINT_HIGH, "%s captured the %s flag!\n",
-						other->client->pers.netname, enemy_team_name);
-				other->client->pers.inventory[ITEM_INDEX(enemy_flag_item)] = 0;
-
-				if (ctf_team == RED_TEAM)
-				{
-					red_team_score++;
-					gi.sound (ent, CHAN_AUTO, gi.soundindex("misc/red_scores.wav"), 1, ATTN_NONE, 0);
-				}
-				else
-				{
-					blue_team_score++;
-					gi.sound (ent, CHAN_AUTO, gi.soundindex("misc/blue_scores.wav"), 1, ATTN_NONE, 0);
-				}
-
-				// other gets another 10 frag bonus
-				other->client->resp.score += 10;//CTF_CAPTURE_BONUS;
-				
-				CTFResetFlags();
-				return false;
-			}
-			return false; // its at home base already
-		}	
-		// hey, its not home.  return it by teleporting it back
-		safe_bprintf(PRINT_HIGH, "%s returned the %s flag!\n", 
-			other->client->pers.netname, team_name);
-		other->client->resp.score += 2;//CTF_RECOVERY_BONUS;
-		if(!strcmp("Red", team_name))
-			gi.sound (ent, CHAN_AUTO, gi.soundindex("misc/red_returned.wav"), 1, ATTN_NONE, 0);
-		else
-			gi.sound (ent, CHAN_AUTO, gi.soundindex("misc/blue_returned.wav"), 1, ATTN_NONE, 0);
-		
-		//CTFResetFlag will remove this entity!  We must return false
-		CTFResetFlag(ctf_team);
-		return false;
-	}
-
-	// hey, its not our flag, pick it up
-	safe_bprintf(PRINT_HIGH, "%s got the %s flag!\n",
-		other->client->pers.netname, team_name);
-	other->client->resp.score += 10;//CTF_FLAG_BONUS;
-	if(!strcmp("Red", team_name))
-		gi.sound (ent, CHAN_AUTO, gi.soundindex("misc/red_picked.wav"), 1, ATTN_NONE, 0);
-	else
-		gi.sound (ent, CHAN_AUTO, gi.soundindex("misc/blue_picked.wav"), 1, ATTN_NONE, 0);
-	
-	other->client->pers.inventory[ITEM_INDEX(flag_item)] = 1;
-
-	// pick up the flag
-	// if it's not a dropped flag, we just make is disappear
-	// if it's dropped, it will be removed by the pickup caller
-	if (!(ent->spawnflags & DROPPED_ITEM)) {
-		ent->flags |= FL_RESPAWN;
-		ent->svflags |= SVF_NOCLIENT;
-		ent->solid = SOLID_NOT;
-	}
-	return true;
-}
-
-//Deathball 
-
-static void DeathballThink(edict_t *ent)
-{	
-	ent->nextthink = level.time + FRAMETIME;
-}
-void DeathballSetup (edict_t *ent)
-{
-	trace_t		tr;
-	vec3_t		dest;
-	float		*v;
-
-	v = tv(-32,-32,-32);
-	VectorCopy (v, ent->mins);
-	v = tv(32,32,32);
-	VectorCopy (v, ent->maxs);
-
-	if (ent->model)
-		gi.setmodel (ent, ent->model);
-	else
-		gi.setmodel (ent, ent->item->world_model);
-	ent->solid = SOLID_TRIGGER;
-	ent->movetype = MOVETYPE_TOSS;  
-	ent->touch = Touch_Item;
-
-	v = tv(0,0,-128);
-	VectorAdd (ent->s.origin, v, dest);
-
-	tr = gi.trace (ent->s.origin, ent->mins, ent->maxs, dest, ent, MASK_SOLID);
-	if (tr.startsolid)
-	{
-		gi.dprintf ("DeathballSetup: %s startsolid at %s\n", ent->classname, vtos(ent->s.origin));
-		G_FreeEdict (ent);
-		return;
-	}
-
-	VectorCopy (tr.endpos, ent->s.origin);
-
-	gi.linkentity (ent);
-	ent->s.frame = 229;
-	ent->nextthink = level.time + FRAMETIME;
-	ent->think = DeathballThink;
-}
-qboolean DeathballDrop(edict_t *ent, gitem_t *item)
-{
-	if (rand() & 1) 
-		safe_cprintf(ent, PRINT_HIGH, "Only lusers drop the ball!\n");
-	else
-		safe_cprintf(ent, PRINT_HIGH, "Winners don't drop their balls!\n");
-	return false;
-}
-void ResetDeathball()
-{
-	char *c;
-	edict_t *ent;
-
-	ent = NULL;
-	c = "item_deathball";
-	while ((ent = G_Find (ent, FOFS(classname), c)) != NULL) {
-		if (ent->spawnflags & DROPPED_ITEM)
-			G_FreeEdict(ent);
-		else {
-			ent->svflags &= ~SVF_NOCLIENT;
-			ent->solid = SOLID_TRIGGER;
-			gi.linkentity(ent);
-			ent->s.frame = 229;
-			ent->s.event = EV_ITEM_RESPAWN;
-		}
-	}
-}
-
-static void DropDeathballTouch(edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
-{
-	//owner (who dropped us) can't touch for two secs
-	if (other == ent->owner && 
-		ent->nextthink - level.time > 2)
-		return;
-	other->in_deathball = true;
-	Touch_Item (ent, other, plane, surf);
-}
-static void DropDeathballThink(edict_t *ent)
-{
-	// auto return the ball
-	// reset ball will remove ourselves
-	
-	ResetDeathball();
-	safe_bprintf(PRINT_HIGH, "The ball has returned!\n");
-	
-}
-void DeadDropDeathball(edict_t *self)
-{
-	edict_t *dropped = NULL;
-	gitem_t *deathball_item;
-
-	dropped = NULL;
-	deathball_item = NULL;
-
-	deathball_item = FindItemByClassname("item_deathball");
-
-	if (self->client->pers.inventory[ITEM_INDEX(deathball_item)]) {
-		dropped = Drop_Item(self, deathball_item);
-		self->client->pers.inventory[ITEM_INDEX(deathball_item)] = 0;
-		safe_bprintf(PRINT_HIGH, "%s lost the ball!\n",
-			self->client->pers.netname);
-		self->s.modelindex4 = 0;
-		self->in_deathball = false;
-	}
-
-	if (dropped) {
-		dropped->think = DropDeathballThink;
-		dropped->nextthink = level.time + 30;
-		dropped->touch = DropDeathballTouch;
-		dropped->s.frame = 229;
-	}
-}
-
-qboolean Pickup_deathball (edict_t *ent, edict_t *other)
-{
-	
-	gitem_t *bomber;
-	gitem_t *strafer;
-	gitem_t *hover;
-	gitem_t *deathball;
-	char	cleanname[16];
-	int i, j;
-	edict_t	*cl_ent;
-
-    //check for any vehicles, if we have one, don't get in a deathball!
-	bomber = FindItemByClassname("item_bomber");
-	strafer = FindItemByClassname("item_strafer");
-	hover = FindItemByClassname("item_hover");
-	if((other->client->pers.inventory[ITEM_INDEX(bomber)] == 1) || (other->client->pers.inventory[ITEM_INDEX(strafer)] == 1)
-		|| (other->client->pers.inventory[ITEM_INDEX(hover)] == 1))
-		return false;
-	
-	deathball = FindItemByClassname(ent->classname);
-
-	// get in the ball
-	if(other->client->pers.inventory[ITEM_INDEX(deathball)] == 1)
-		return false; //can't get in a deathball if you're already in one! (would never happen)
-
-	//put him in the ball(weapon model replaced with this)
-	other->s.modelindex4 = gi.modelindex("vehicles/deathball/deathball.md2");
-
-	other->in_deathball = true;
-	
-	other->client->pers.inventory[ITEM_INDEX(deathball)] = 1;
-	other->client->newweapon = ent->item;
-	
-	if (!(ent->spawnflags & DROPPED_ITEM)) {
-		ent->flags |= FL_RESPAWN;
-		ent->svflags |= SVF_NOCLIENT;
-		ent->solid = SOLID_NOT;
-	}
-	//clean up name, get rid of escape chars
-	j = 0;
-	for (i = 0; i < 16; i++)
-		cleanname[i] = 0;
-		for (i = 0; i < strlen(other->client->pers.netname) && i < 16; i++) {
-			if ( other->client->pers.netname[i] == '^' ) {
-				i += 1;
-				continue;
-			}
-		cleanname[j] = other->client->pers.netname[i]+128;
-		j++;
-	}
-	if((int)(dmflags->value) & DF_SKINTEAMS) {
-		for (i=0 ; i<maxclients->value ; i++)
-		{
-			cl_ent = g_edicts + 1 + i;
-			if (!cl_ent->inuse || cl_ent->is_bot)
-				continue;
-			safe_centerprintf(cl_ent, "%s got the ball!\n", cleanname);
-		}
-		safe_centerprintf(other, "You've got the ball!\nShoot the ball\ninto your enemy's goal!");
-	}
-	else
-	{
-		for (i=0 ; i<maxclients->value ; i++)
-		{
-			cl_ent = g_edicts + 1 + i;
-			if (!cl_ent->inuse || cl_ent->is_bot)
-				continue;
-			safe_centerprintf(cl_ent, "%s got the ball!\n", cleanname);
-		}
-			safe_centerprintf(other, "You've got the ball!\nShoot the ball\ninto any goal!");
-	}
-	//play a sound here too
-	gi.sound (ent, CHAN_AUTO, gi.soundindex("misc/db_pickup.wav"), 1, ATTN_NONE, 0);
-
-	return true;
-}
 
 void Drop_General (edict_t *ent, gitem_t *item)
 {
@@ -1056,26 +283,38 @@ qboolean Pickup_Key (edict_t *ent, edict_t *other)
 
 //======================================================================
 
-qboolean Add_Ammo (edict_t *ent, gitem_t *item, int count)
+qboolean Add_Ammo (edict_t *ent, gitem_t *item, int count, qboolean weapon, qboolean dropped)
 {
 	int			index;
-	int			max;
+	int			max, base;
 
 	if (!ent->client)
 		return false;
 
-	if (item->tag == AMMO_BULLETS)
+	if (item->tag == AMMO_BULLETS) {
 		max = ent->client->pers.max_bullets;
-	else if (item->tag == AMMO_SHELLS)
+		base = BASE_BULLETS;
+	}
+	else if (item->tag == AMMO_SHELLS) {
 		max = ent->client->pers.max_shells;
-	else if (item->tag == AMMO_ROCKETS)
+		base = BASE_SHELLS;
+	}
+	else if (item->tag == AMMO_ROCKETS) {
 		max = ent->client->pers.max_rockets;
-	else if (item->tag == AMMO_GRENADES)
+		base = BASE_ROCKETS;
+	}
+	else if (item->tag == AMMO_GRENADES) {
 		max = ent->client->pers.max_grenades;
-	else if (item->tag == AMMO_CELLS)
+		base = BASE_GRENADES;
+	}
+	else if (item->tag == AMMO_CELLS) {
 		max = ent->client->pers.max_cells;
-	else if (item->tag == AMMO_SLUGS)
+		base = BASE_CELLS;
+	}
+	else if (item->tag == AMMO_SLUGS) {
 		max = ent->client->pers.max_slugs;
+		base = BASE_SLUGS;
+	}
 	else
 		return false;
 
@@ -1084,7 +323,14 @@ qboolean Add_Ammo (edict_t *ent, gitem_t *item, int count)
 	if (ent->client->pers.inventory[index] == max)
 		return false;
 
-	ent->client->pers.inventory[index] += count;
+	if (weapon && !dropped && (ent->client->pers.inventory[index] > 0)) 
+		count = 1; //already has weapon -- not dropped. Give him 1 ammo.
+
+	//if less than base ammo, restock ammo fully
+	if(ent->client->pers.inventory[index] < base) //less than base ammount
+		ent->client->pers.inventory[index] = base;
+	else
+		ent->client->pers.inventory[index] += count;
 
 	if (ent->client->pers.inventory[index] > max)
 		ent->client->pers.inventory[index] = max;
@@ -1096,7 +342,7 @@ qboolean Pickup_Ammo (edict_t *ent, edict_t *other)
 {
 	int			oldcount;
 	int			count;
-	qboolean	weapon;
+	qboolean		weapon;
 
 	weapon = (ent->item->flags & IT_WEAPON);
 	if ( (weapon) && ( (int)dmflags->value & DF_INFINITE_AMMO ) )
@@ -1108,7 +354,7 @@ qboolean Pickup_Ammo (edict_t *ent, edict_t *other)
 
 	oldcount = other->client->pers.inventory[ITEM_INDEX(ent->item)];
 
-	if (!Add_Ammo (other, ent->item, count))
+	if (!Add_Ammo (other, ent->item, count, false, true)) //Not 'dropped' but give full ammo even if ammo > 0
 		return false;
 
 	if (weapon && !oldcount)
@@ -1134,7 +380,7 @@ void Drop_Ammo (edict_t *ent, gitem_t *item)
 	else
 		dropped->count = ent->client->pers.inventory[index];
 
-	if (ent->client->pers.weapon && 
+	if (ent->client->pers.weapon &&
 		ent->client->pers.weapon->tag == AMMO_GRENADES &&
 		item->tag == AMMO_GRENADES &&
 		ent->client->pers.inventory[index] - dropped->count <= 0) {
@@ -1166,7 +412,7 @@ void MegaHealth_think (edict_t *self)
 }
 void Healthbox_think (edict_t *self)
 {
-	
+
 	self->nextthink = level.time + 7;
 	self->s.effects = EF_ROTATE;
 	self->s.renderfx = RF_GLOW;
@@ -1400,7 +646,7 @@ void Touch_Item (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf
 	if (taken)
 	{
 		// flash the screen
-		other->client->bonus_alpha = 0.25;	
+		other->client->bonus_alpha = 0.25;
 
 		// show icon and name on status bar
 		other->client->ps.stats[STAT_PICKUP_ICON] = gi.imageindex(ent->item->icon);
@@ -1413,7 +659,7 @@ void Touch_Item (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf
 
 		if (ent->item->pickup == Pickup_Health)
 		{
-			if (ent->count == 2)
+			if (ent->count == 5)
 				gi.sound(other, CHAN_ITEM, gi.soundindex("items/s_health.wav"), 1, ATTN_NORM, 0);
 			else if (ent->count == 10)
 				gi.sound(other, CHAN_ITEM, gi.soundindex("items/n_health.wav"), 1, ATTN_NORM, 0);
@@ -1487,7 +733,7 @@ edict_t *Drop_Item (edict_t *ent, gitem_t *item)
 	if(!strcmp(item->classname, "item_hover"))
 		dropped->s.modelindex3 = gi.modelindex("vehicles/hover/flames.md2");
 	dropped->solid = SOLID_TRIGGER;
-	dropped->movetype = MOVETYPE_TOSS;  
+	dropped->movetype = MOVETYPE_TOSS;
 	dropped->touch = drop_temp_touch;
 	dropped->owner = ent;
 
@@ -1562,7 +808,7 @@ void droptofloor (edict_t *ent)
 		gi.setmodel (ent, ent->item->world_model);
 	ent->solid = SOLID_TRIGGER;
 
-	ent->movetype = MOVETYPE_TOSS;  
+	ent->movetype = MOVETYPE_TOSS;
 	ent->touch = Touch_Item;
 
 	v = tv(0,0,-128);
@@ -1740,7 +986,7 @@ void SpawnItem (edict_t *ent, gitem_t *item)
 		if(excessive->value || instagib->value || rocket_arena->value)
 		{
 			if (item->flags == IT_AMMO || (strcmp(ent->classname, "weapon_bfg") == 0) ||
-				(strcmp(ent->classname, "weapon_hyperblaster") == 0) || 
+				(strcmp(ent->classname, "weapon_hyperblaster") == 0) ||
 				(strcmp(ent->classname, "weapon_railgun") == 0) ||
 				(strcmp(ent->classname, "weapon_rocketlauncher") == 0) ||
 				(strcmp(ent->classname, "weapon_grenadelauncher") == 0) ||
@@ -1769,7 +1015,7 @@ void SpawnItem (edict_t *ent, gitem_t *item)
 	if (strcmp(ent->classname, "item_flag_red") && //flags are special and don't get this
 		strcmp(ent->classname, "item_flag_blue")) {
 		ent->s.effects = EF_ROTATE;
-			
+
 	}
 	ent->s.renderfx = RF_GLOW;
 	if((strcmp(ent->classname, "Health") == 0)) {
@@ -1798,12 +1044,12 @@ void SpawnItem (edict_t *ent, gitem_t *item)
 
 	//ditto for deathball
 	if(strcmp(ent->classname, "item_deathball") == 0)
-		ent->think = DeathballSetup;	
+		ent->think = DeathballSetup;
 }
 
 //======================================================================
 
-gitem_t	itemlist[] = 
+gitem_t	itemlist[] =
 {
 	{
 		NULL
@@ -1816,7 +1062,7 @@ gitem_t	itemlist[] =
 /*QUAKED item_armor_body (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"item_armor_body", 
+		"item_armor_body",
 		Pickup_Armor,
 		NULL,
 		NULL,
@@ -1839,7 +1085,7 @@ gitem_t	itemlist[] =
 /*QUAKED item_armor_combat (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"item_armor_combat", 
+		"item_armor_combat",
 		Pickup_Armor,
 		NULL,
 		NULL,
@@ -1862,7 +1108,7 @@ gitem_t	itemlist[] =
 /*QUAKED item_armor_jacket (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"item_armor_jacket", 
+		"item_armor_jacket",
 		Pickup_Armor,
 		NULL,
 		NULL,
@@ -1885,7 +1131,7 @@ gitem_t	itemlist[] =
 /*QUAKED item_armor_shard (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"item_armor_shard", 
+		"item_armor_shard",
 		Pickup_Armor,
 		NULL,
 		NULL,
@@ -1909,7 +1155,7 @@ gitem_t	itemlist[] =
 /*QUAKED item_power_screen (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"item_power_screen", 
+		"item_power_screen",
 		Pickup_PowerArmor,
 		Use_PowerArmor,
 		Drop_PowerArmor,
@@ -2004,7 +1250,7 @@ gitem_t	itemlist[] =
 		"item_bomber",
 		Get_in_vehicle,
 		NULL,
-		Leave_vehicle, 
+		Leave_vehicle,
 		Weapon_Bomber,
 		"ctf/flagtk.wav",
 		"vehicles/bomber/tris.md2", 0,
@@ -2026,11 +1272,11 @@ gitem_t	itemlist[] =
 		"item_strafer",
 		Get_in_vehicle,
 		NULL,
-		Leave_vehicle, 
+		Leave_vehicle,
 		Weapon_Strafer,
 		"ctf/flagtk.wav",
 		"vehicles/strafer/tris.md2", 0,
-		"vehicles/strafer/v_wep.md2", 
+		"vehicles/strafer/v_wep.md2",
 /* icon */		"w_blaster",
 /* pickup */	"Strafer",
 		0,
@@ -2049,7 +1295,7 @@ gitem_t	itemlist[] =
 		"item_hover",
 		Get_in_vehicle,
 		NULL,
-		Leave_vehicle, 
+		Leave_vehicle,
 		Weapon_Hover,
 		"ctf/flagtk.wav",
 		"vehicles/hover/tris.md2", 0,
@@ -2072,7 +1318,7 @@ gitem_t	itemlist[] =
 		"item_deathball",
 		Pickup_deathball,
 		NULL,
-		DeathballDrop, 
+		DeathballDrop,
 		Weapon_Deathball,
 		"ctf/flagtk.wav",
 		"vehicles/deathball/deathball.md2", 0,
@@ -2094,7 +1340,7 @@ gitem_t	itemlist[] =
 		"item_dbtarget",
 		NULL,
 		NULL,
-		NULL, 
+		NULL,
 		NULL,
 		NULL,
 		"models/objects/blank/tris.md2", 0,
@@ -2108,13 +1354,13 @@ gitem_t	itemlist[] =
 		WEAP_DEATHBALL,
 		NULL,
 		0,
-		NULL 
+		NULL
 	},
 	{
 		"item_red_dbtarget",
 		NULL,
 		NULL,
-		NULL, 
+		NULL,
 		NULL,
 		NULL,
 		"models/objects/blank/tris.md2", 0,
@@ -2128,13 +1374,13 @@ gitem_t	itemlist[] =
 		WEAP_DEATHBALL,
 		NULL,
 		0,
-		NULL 
+		NULL
 	},
 	{
 		"item_blue_dbtarget",
 		NULL,
 		NULL,
-		NULL, 
+		NULL,
 		NULL,
 		NULL,
 		"models/objects/blank/tris.md2", 0,
@@ -2148,16 +1394,16 @@ gitem_t	itemlist[] =
 		WEAP_DEATHBALL,
 		NULL,
 		0,
-		NULL 
+		NULL
 	},
 	//
-	// WEAPONS 
+	// WEAPONS
 	//
 /* weapon_grapple (.3 .3 1) (-16 -16 -16) (16 16 16)
 always owned, never in the world
 */
 	{
-		"weapon_grapple", 
+		"weapon_grapple",
 		NULL,
 		Use_Weapon,
 		NULL,
@@ -2180,7 +1426,7 @@ always owned, never in the world
 always owned, never in the world
 */
 	{
-		"weapon_blaster", 
+		"weapon_blaster",
 		NULL,
 		Use_Weapon,
 		NULL,
@@ -2203,7 +1449,7 @@ always owned, never in the world
 /*QUAKED weapon_shotgun (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"weapon_shotgun", 
+		"weapon_shotgun",
 		Pickup_Weapon,
 		Use_Weapon,
 		Drop_Weapon,
@@ -2226,7 +1472,7 @@ always owned, never in the world
 /*QUAKED weapon_supershotgun (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"weapon_supershotgun", 
+		"weapon_supershotgun",
 		Pickup_Weapon,
 		Use_Weapon,
 		Drop_Weapon,
@@ -2249,7 +1495,7 @@ always owned, never in the world
 /*QUAKED weapon_chaingun (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"weapon_chaingun", 
+		"weapon_chaingun",
 		Pickup_Weapon,
 		Use_Weapon,
 		Drop_Weapon,
@@ -2295,7 +1541,7 @@ always owned, never in the world
 /*QUAKED weapon_hyperblaster (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"weapon_hyperblaster", 
+		"weapon_hyperblaster",
 		Pickup_Weapon,
 		Use_Weapon,
 		Drop_Weapon,
@@ -2318,7 +1564,7 @@ always owned, never in the world
 /*QUAKED weapon_railgun (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"weapon_railgun", 
+		"weapon_railgun",
 		Pickup_Weapon,
 		Use_Weapon,
 		Drop_Weapon,
@@ -2358,7 +1604,7 @@ always owned, never in the world
 		WEAP_VAPORIZER,
 		NULL,
 		0,
-/* precache */ "weapons/energyfield.wav smallmech/sight.wav"
+/* precache */ "weapons/energyfield.wav smallmech/sight.wav weapons/vaporizer_hum.wav"
 	},
 
 	//
@@ -2509,7 +1755,7 @@ always owned, never in the world
 /*QUAKED item_quad (.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{
-		"item_quad", 
+		"item_quad",
 		Pickup_Powerup,
 		Use_Quad,
 		Drop_General,
@@ -2667,9 +1913,9 @@ void SP_item_health_small (edict_t *self)
 		G_FreeEdict (self);
 		return;
 	}
-	
+
 	self->model = "models/items/healing/small/tris.md2";
-	self->count = 2;
+	self->count = 5;
 	self->classname = "Health";
 	SpawnItem (self, FindItem ("Health"));
 	self->style = HEALTH_IGNORE_MAX;

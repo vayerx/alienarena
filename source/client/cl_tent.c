@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -98,7 +98,7 @@ struct sfx_s	*cl_sfx_rockexp;
 struct sfx_s	*cl_sfx_watrexp;
 // RAFAEL
 struct sfx_s	*cl_sfx_footsteps[4];
-struct sfx_s    *cl_sfx_metal_footsteps[4]; 
+struct sfx_s    *cl_sfx_metal_footsteps[4];
 
 struct model_s	*cl_mod_powerscreen;
 
@@ -130,12 +130,8 @@ void CL_RegisterTEntSounds (void)
 	cl_sfx_ric2 = S_RegisterSound ("world/ric2.wav");
 	cl_sfx_ric3 = S_RegisterSound ("world/ric3.wav");
 	cl_sfx_lashit = S_RegisterSound("weapons/lashit.wav");
-	cl_sfx_spark5 = S_RegisterSound ("world/spark5.wav");
-	cl_sfx_spark6 = S_RegisterSound ("world/spark6.wav");
-	cl_sfx_spark7 = S_RegisterSound ("world/spark7.wav");
 	cl_sfx_railg = S_RegisterSound ("weapons/railgf1a.wav");
 	cl_sfx_rockexp = S_RegisterSound ("weapons/rocklx1a.wav");
-	cl_sfx_watrexp = S_RegisterSound ("weapons/xpld_wat.wav");
 
 	S_RegisterSound ("player/land1.wav");
 	S_RegisterSound ("player/fall2.wav");
@@ -146,12 +142,12 @@ void CL_RegisterTEntSounds (void)
 		Com_sprintf (name, sizeof(name), "player/step%i.wav", i+1);
 		cl_sfx_footsteps[i] = S_RegisterSound (name);
 	}
-	for (i=0 ; i<4 ; i++) 
-	{ 
-	   Com_sprintf (name, sizeof(name), "player/step_metal%i.wav", i+1); 
-	   cl_sfx_metal_footsteps[i] = S_RegisterSound (name); 
-	} 
-}	
+	for (i=0 ; i<4 ; i++)
+	{
+	   Com_sprintf (name, sizeof(name), "player/step_metal%i.wav", i+1);
+	   cl_sfx_metal_footsteps[i] = S_RegisterSound (name);
+	}
+}
 
 /*
 =================
@@ -160,17 +156,9 @@ CL_RegisterTEntModels
 */
 void CL_RegisterTEntModels (void)
 {
-	cl_mod_powerscreen = R_RegisterModel ("models/items/armor/effect/tris.md2");
-	cl_mod_blaster_muzzleflash = R_RegisterModel ("sprites/s_bfg1.sp2");
-
+	
 	R_RegisterModel ("models/objects/laser/tris.md2");
-	R_RegisterModel ("models/objects/grenade2/tris.md2");
-	R_RegisterModel ("models/weapons/v_machn/tris.md2");
-	R_RegisterModel ("models/weapons/v_handgr/tris.md2");
-	R_RegisterModel ("models/weapons/v_shotg2/tris.md2");
-	R_RegisterModel ("models/objects/gibs/bone/tris.md2");
-	R_RegisterModel ("models/objects/gibs/sm_meat/tris.md2");
-	R_RegisterModel ("models/objects/gibs/bone2/tris.md2");
+
 	// RAFAEL
 	// re.RegisterModel ("models/objects/blaser/tris.md2");
 
@@ -178,13 +166,7 @@ void CL_RegisterTEntModels (void)
 	R_RegisterPic ("a_bullets");
 	R_RegisterPic ("i_health");
 	R_RegisterPic ("a_grenades");
-
-//ROGUE
-	cl_mod_lightning = R_RegisterModel ("models/proj/lightning/tris.md2");
-	cl_mod_heatbeam = R_RegisterModel ("models/proj/beam/tris.md2");
-	cl_mod_monster_heatbeam = R_RegisterModel ("models/proj/widowbeam/tris.md2");
-//ROGUE
-}	
+}
 
 /*
 =================
@@ -213,7 +195,7 @@ explosion_t *CL_AllocExplosion (void)
 	int		i;
 	int		time;
 	int		index;
-	
+
 	for (i=0 ; i<MAX_EXPLOSIONS ; i++)
 	{
 		if (cl_explosions[i].type == ex_free)
@@ -267,9 +249,9 @@ int CL_ParseBeam (struct model_s *model)
 	vec3_t	start, end;
 	beam_t	*b;
 	int		i;
-	
+
 	ent = MSG_ReadShort (&net_message);
-	
+
 	MSG_ReadPos (&net_message, start);
 	MSG_ReadPos (&net_message, end);
 
@@ -300,7 +282,7 @@ int CL_ParseBeam (struct model_s *model)
 			return ent;
 		}
 	}
-	Com_Printf ("beam list overflow!\n");	
+	Com_Printf ("beam list overflow!\n");
 	return ent;
 }
 
@@ -315,9 +297,9 @@ int CL_ParseBeam2 (struct model_s *model)
 	vec3_t	start, end, offset;
 	beam_t	*b;
 	int		i;
-	
+
 	ent = MSG_ReadShort (&net_message);
-	
+
 	MSG_ReadPos (&net_message, start);
 	MSG_ReadPos (&net_message, end);
 	MSG_ReadPos (&net_message, offset);
@@ -345,14 +327,14 @@ int CL_ParseBeam2 (struct model_s *model)
 		{
 			b->entity = ent;
 			b->model = model;
-			b->endtime = cl.time + 200;	
+			b->endtime = cl.time + 200;
 			VectorCopy (start, b->start);
 			VectorCopy (end, b->end);
 			VectorCopy (offset, b->offset);
 			return ent;
 		}
 	}
-	Com_Printf ("beam list overflow!\n");	
+	Com_Printf ("beam list overflow!\n");
 	return ent;
 }
 
@@ -369,9 +351,9 @@ int CL_ParsePlayerBeam (struct model_s *model)
 	vec3_t	start, end, offset;
 	beam_t	*b;
 	int		i;
-	
+
 	ent = MSG_ReadShort (&net_message);
-	
+
 	MSG_ReadPos (&net_message, start);
 	MSG_ReadPos (&net_message, end);
 	// PMM - network optimization
@@ -417,7 +399,7 @@ int CL_ParsePlayerBeam (struct model_s *model)
 			return ent;
 		}
 	}
-	Com_Printf ("beam list overflow!\n");	
+	Com_Printf ("beam list overflow!\n");
 	return ent;
 }
 //rogue
@@ -433,7 +415,7 @@ int CL_ParseLightning (struct model_s *model)
 	vec3_t	start, end;
 	beam_t	*b;
 	int		i;
-	
+
 	srcEnt = MSG_ReadShort (&net_message);
 	destEnt = MSG_ReadShort (&net_message);
 
@@ -471,7 +453,7 @@ int CL_ParseLightning (struct model_s *model)
 			return srcEnt;
 		}
 	}
-	Com_Printf ("beam list overflow!\n");	
+	Com_Printf ("beam list overflow!\n");
 	return srcEnt;
 }
 
@@ -623,7 +605,7 @@ void CL_ParseFire (void)
 			magnitude = MSG_ReadLong (&net_message); // really interval
 		}
 	}
-	
+
 }
 
 void CL_ParseSmoke (void)
@@ -653,7 +635,6 @@ void CL_ParseSmoke (void)
 		{
 			s->id = id;
 			s->count = MSG_ReadByte (&net_message);
-			s->count = 40;//just for testing here
 			MSG_ReadPos (&net_message, s->org);
 			MSG_ReadDir (&net_message, s->dir);
 			r = MSG_ReadByte (&net_message);
@@ -676,7 +657,7 @@ void CL_ParseSmoke (void)
 			magnitude = MSG_ReadLong (&net_message); // really interval
 		}
 	}
-	
+
 }
 
 //ROGUE
@@ -699,7 +680,10 @@ void CL_ParseTEnt (void)
 	int		color;
 	int		r;
 	float	fcolor[3], intensity, alpha;
-	
+	trace_t	trace;
+	static vec3_t mins = { -8, -8, -8 }; 
+    static vec3_t maxs = { 8, 8, 8 }; 
+
 	type = MSG_ReadByte (&net_message);
 
 	switch (type)
@@ -720,9 +704,10 @@ void CL_ParseTEnt (void)
 		MSG_ReadPos (&net_message, pos);
 		MSG_ReadDir (&net_message, dir);
 
-		// FIXME: change to type
-		if (type == TE_GUNSHOT)
-			CL_ParticleEffect (pos, dir, 425, 10);	// shotgun - do I use this?
+		if (type == TE_GUNSHOT) {
+			CL_ParticleEffect (pos, dir, 425, 10);
+			CL_BulletMarks(pos, dir);
+		}
 		else
 			CL_ParticleEffect (pos, dir, 425, 2);	// bullets, color is 0xe0
 
@@ -741,27 +726,25 @@ void CL_ParseTEnt (void)
 		}
 
 		break;
-		
+
 	case TE_SCREEN_SPARKS:
 	case TE_SHIELD_SPARKS:
 		MSG_ReadPos (&net_message, pos);
 		MSG_ReadDir (&net_message, dir);
-		if (type == TE_SCREEN_SPARKS)
+		if (type == TE_SCREEN_SPARKS) {
 			CL_LaserSparks (pos, dir, 0xd0, 20);
+			CL_BeamgunMark(pos, dir, 0.8);
+		}
 		else
 			CL_ParticleEffect (pos, dir, 0xb0, 40);
 		//FIXME : replace or remove this sound
 		S_StartSound (pos, 0, 0, cl_sfx_lashit, 1, ATTN_NORM, 0);
 		break;
-		
-	case TE_SHOTGUN:				// martian laser effect
-		if(enginemode->value == 1)
-			CL_ParseLaser (0xd0d1d2d3);	
-		else {
-			MSG_ReadPos (&net_message, pos);
-			MSG_ReadPos (&net_message, pos2);
-			CL_LaserBeam (pos, pos2);
-		}
+
+	case TE_LASERBEAM:				// martian laser effect
+		MSG_ReadPos (&net_message, pos);
+		MSG_ReadPos (&net_message, pos2);
+		CL_LaserBeam (pos, pos2);
 		break;
 
 	case TE_SPLASH:			// bullet hitting water
@@ -800,24 +783,17 @@ void CL_ParseTEnt (void)
 	case TE_BLASTER:			// blaster hitting wall
 		MSG_ReadPos (&net_message, pos);
 		MSG_ReadDir (&net_message, dir);
-		if(enginemode->value == 1) {
-			color = 0xb3;
-		    cnt = 50;
-			CL_ParticleEffect2 (pos, dir, color, cnt);
-		}
-		else
-			CL_BlasterParticles (pos, dir);
+		CL_BlasterParticles (pos, dir);
 
 		break;
-		
+
 	case TE_RAILTRAIL:			// railgun effect - let's try the heat missile thingy too!
-		if(enginemode->value == 1)
-			CL_ParseLaser (0xf2f2f2f2);		
-		else {
-			MSG_ReadPos (&net_message, pos);
-			MSG_ReadPos (&net_message, pos2);
-			CL_DisruptorBeam (pos, pos2);
-		}
+		MSG_ReadPos (&net_message, pos);
+		MSG_ReadPos (&net_message, pos2);
+		CL_DisruptorBeam (pos, pos2);
+		trace = CL_Trace ( pos, mins, maxs, pos2, -1, MASK_PLAYERSOLID, true, NULL); 
+		if(trace.contents)
+			CL_BeamgunMark(pos2, trace.plane.normal, 0.4);
 		S_StartSound (pos, 0, 0, cl_sfx_railg, 1, ATTN_NONE, 0);
 		break;
 
@@ -827,11 +803,11 @@ void CL_ParseTEnt (void)
 		ex = CL_AllocExplosion ();
 		VectorCopy (pos, ex->ent.origin);
 		ex->start = cl.frame.servertime - 100;
-		
+
 		ex->ent.angles[1] = rand() % 360;
-	
-		
-		CL_DustParticles (pos);									
+
+
+		CL_DustParticles (pos);
 		break;
 
 	case TE_EXPLOSION1:
@@ -839,20 +815,10 @@ void CL_ParseTEnt (void)
 	case TE_ROCKET_EXPLOSION_WATER:
 		MSG_ReadPos (&net_message, pos);
 
-		ex = CL_AllocExplosion ();
-		VectorCopy (pos, ex->ent.origin);
-		ex->ent.flags = RF_FULLBRIGHT;
-		ex->start = cl.frame.servertime - 100;
-		ex->light = 350;
-		ex->lightcolor[0] = 1.0;
-		ex->lightcolor[1] = 0.5;
-		ex->lightcolor[2] = 0.5;
-		ex->ent.angles[1] = rand() % 360;
-
 		V_AddStain ( pos, 25, 15, 15, 15, 200 );
 		V_AddStain ( pos, 25*3, 15, 15, 15, 66 );
-	
-		CL_ExplosionParticles (pos);							
+
+		CL_ExplosionParticles (pos);
 		if (type == TE_ROCKET_EXPLOSION_WATER)
 			S_StartSound (pos, 0, 0, cl_sfx_watrexp, 1, ATTN_NORM, 0);
 		else
@@ -902,10 +868,13 @@ void CL_ParseTEnt (void)
 		CL_NewLightning (pos, pos2);
 		break;
 
-	case TE_HEATBEAM:
+	case TE_VAPORBEAM:
 		MSG_ReadPos (&net_message, pos);
 		MSG_ReadPos (&net_message, pos2);
 		CL_VaporizerBeam (pos, pos2);
+		trace = CL_Trace ( pos, mins, maxs, pos2, -1, MASK_PLAYERSOLID, true, NULL); 
+		if(trace.contents)
+			CL_VaporizerMarks(pos2, trace.plane.normal);	
 		break;
 
 	case TE_STEAM:
@@ -935,16 +904,8 @@ void CL_ParseTEnt (void)
 		S_StartSound (pos, 0, 0, S_RegisterSound ("weapons/biglaser.wav"), 1, ATTN_NONE, 0);
 		break;
 
-	case TE_BLASTER_MUZZLEFLASH:
+	case TE_CHAINGUNSMOKE:
 		MSG_ReadPos (&net_message, pos);
-		ex = CL_AllocExplosion ();
-		VectorCopy (pos, ex->ent.origin);
-		ex->ent.flags = RF_FULLBRIGHT;
-		ex->start = cl.frame.servertime - 100;
-		ex->light = 350;
-		ex->lightcolor[0] = 1.0;
-		ex->lightcolor[1] = 0.5;
-		ex->lightcolor[2] = 0.0;
 		CL_MuzzleParticles (pos);
 		break;
 	case TE_BLUE_MUZZLEFLASH:
@@ -993,17 +954,16 @@ void CL_ParseTEnt (void)
 		ex->lightcolor[0] = 1.0;
 		ex->lightcolor[1] = 0.0;
 		ex->lightcolor[2] = 1.0;
-		
+
 		CL_Deathfield (pos);
 		break;
 	case TE_BLASTERBEAM:			// blaster beam effect
-		if(enginemode->value == 1)
-			CL_ParseLaser (0xb0b1b2b3);		
-		else {
-			MSG_ReadPos (&net_message, pos);
-			MSG_ReadPos (&net_message, pos2);
-			CL_BlasterBeam (pos, pos2);
-		}
+		MSG_ReadPos (&net_message, pos);
+		MSG_ReadPos (&net_message, pos2);
+		CL_BlasterBeam (pos, pos2);
+		trace = CL_Trace ( pos, mins, maxs, pos2, -1, MASK_PLAYERSOLID, true, NULL); 
+		if(trace.contents)
+			CL_BlasterMark(pos2, trace.plane.normal);
 		break;
 
 	case TE_STAIN:

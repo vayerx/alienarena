@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -60,7 +60,6 @@ typedef struct pack_s
 
 char	fs_gamedir[MAX_OSPATH];
 cvar_t	*fs_basedir;
-cvar_t	*fs_cddir;
 cvar_t	*fs_gamedirvar;
 
 typedef struct filelink_s
@@ -125,7 +124,7 @@ Creates any directories needed to store the given filename
 void	FS_CreatePath (char *path)
 {
 	char	*ofs;
-	
+
 	for (ofs = path+1 ; *ofs ; ofs++)
 	{
 		if (*ofs == '/')
@@ -158,12 +157,12 @@ void FS_FCloseFile (FILE *f)
 */
 int	Developer_searchpath (int who)
 {
-	
+
 	int		ch;
 	// PMM - warning removal
 //	char	*start;
 	searchpath_t	*search;
-	
+
 	if (who == 1) // xatrix
 		ch = 'x';
 	else if (who == 2)
@@ -221,7 +220,7 @@ int FS_FOpenFile (char *filename, FILE **file)
 			Com_sprintf (netpath, sizeof(netpath), "%s%s",link->to, filename+link->fromlength);
 			*file = fopen (netpath, "rb");
 			if (*file)
-			{		
+			{
 				Com_DPrintf ("link file: %s\n",netpath);
 				return FS_filelength (*file);
 			}
@@ -247,30 +246,30 @@ int FS_FOpenFile (char *filename, FILE **file)
 				// open a new file on the pakfile
 					*file = fopen (pak->filename, "rb");
 					if (!*file)
-						Com_Error (ERR_FATAL, "Couldn't reopen %s", pak->filename);	
+						Com_Error (ERR_FATAL, "Couldn't reopen %s", pak->filename);
 					fseek (*file, pak->files[i].filepos, SEEK_SET);
 					return pak->files[i].filelen;
 				}
 		}
 		else
-		{		
+		{
 	// check a file in the directory tree
-			
+
 			Com_sprintf (netpath, sizeof(netpath), "%s/%s",search->filename, filename);
-			
+
 			*file = fopen (netpath, "rb");
 			if (!*file)
 				continue;
-			
+
 			Com_DPrintf ("FindFile: %s\n",netpath);
 
 			return FS_filelength (*file);
 		}
-		
+
 	}
-	
+
 	Com_DPrintf ("FindFile: can't find %s\n", filename);
-	
+
 	*file = NULL;
 	return -1;
 }
@@ -292,11 +291,11 @@ int FS_FOpenFile (char *filename, FILE **file)
 	if (!strcmp(filename, "config.cfg") || !strncmp(filename, "players/", 8))
 	{
 		Com_sprintf (netpath, sizeof(netpath), "%s/%s",FS_Gamedir(), filename);
-		
+
 		*file = fopen (netpath, "rb");
 		if (!*file)
 			return -1;
-		
+
 		Com_DPrintf ("FindFile: %s\n",netpath);
 
 		return FS_filelength (*file);
@@ -320,13 +319,13 @@ int FS_FOpenFile (char *filename, FILE **file)
 		// open a new file on the pakfile
 			*file = fopen (pak->filename, "rb");
 			if (!*file)
-				Com_Error (ERR_FATAL, "Couldn't reopen %s", pak->filename);	
+				Com_Error (ERR_FATAL, "Couldn't reopen %s", pak->filename);
 			fseek (*file, pak->files[i].filepos, SEEK_SET);
 			return pak->files[i].filelen;
 		}
-	
+
 	Com_DPrintf ("FindFile: can't find %s\n", filename);
-	
+
 	*file = NULL;
 	return -1;
 }
@@ -341,7 +340,6 @@ FS_ReadFile
 Properly handles partial reads
 =================
 */
-void CDAudio_Stop(void);
 #define	MAX_READ	0x10000		// read in blocks of 64k
 void FS_Read (void *buffer, int len, FILE *f)
 {
@@ -363,14 +361,7 @@ void FS_Read (void *buffer, int len, FILE *f)
 		read = fread (buf, 1, block, f);
 		if (read == 0)
 		{
-			// we might have been trying to read from a CD
-			if (!tries)
-			{
-				tries = 1;
-				CDAudio_Stop();
-			}
-			else
-				Com_Error (ERR_FATAL, "FS_Read: 0 bytes read");
+			Com_Error (ERR_FATAL, "FS_Read: 0 bytes read");
 		}
 
 		if (read == -1)
@@ -444,7 +435,7 @@ int FS_LoadFile (char *path, void **buffer)
 			*buffer = NULL;
 		return -1;
 	}
-	
+
 	if (!buffer)
 	{
 		fclose (h);
@@ -478,7 +469,7 @@ int FS_LoadFileZ (const char *path, void **buffer) // jit - null-terminated FS_L
 
 		return -1;
 	}
-	
+
 	if (!buffer)
 	{
 		fclose(h);
@@ -574,7 +565,7 @@ pack_t *FS_LoadPackFile (char *packfile)
 	pack->handle = packhandle;
 	pack->numfiles = numpackfiles;
 	pack->files = newfiles;
-	
+
 	Com_Printf ("Added packfile %s (%i files)\n", packfile, numpackfiles);
 	return pack;
 }
@@ -585,7 +576,7 @@ pack_t *FS_LoadPackFile (char *packfile)
 FS_AddGameDirectory
 
 Sets fs_gamedir, adds the directory to the head of the path,
-then loads and adds pak1.pak pak2.pak ... 
+then loads and adds pak1.pak pak2.pak ...
 ================
 */
 void FS_AddGameDirectory (char *dir)
@@ -622,7 +613,7 @@ void FS_AddGameDirectory (char *dir)
 		search = Z_Malloc (sizeof(searchpath_t));
 		search->pack = pak;
 		search->next = fs_searchpaths;
-		fs_searchpaths = search;		
+		fs_searchpaths = search;
 	}
 
 
@@ -632,7 +623,7 @@ void FS_AddGameDirectory (char *dir)
 /*
 ================
 FS_AddHomeAsGameDirectory
- 
+
 Use ~/.codered/dir as fs_gamedir
 ================
 */
@@ -651,7 +642,7 @@ void FS_AddHomeAsGameDirectory (char *dir)
 
 		strncpy(fs_gamedir,gdir,sizeof(fs_gamedir)-1);
 		fs_gamedir[sizeof(fs_gamedir)-1] = 0;
-		
+
 		FS_AddGameDirectory (gdir);
 	}
  }
@@ -695,19 +686,19 @@ void FS_ExecAutoexec (void)
 #else
 	dir = Cvar_VariableString("gamedir");
 	if (*dir)
-		Com_sprintf(name, sizeof(name), "%s/%s/autoexec.cfg", fs_basedir->string, dir); 
+		Com_sprintf(name, sizeof(name), "%s/%s/autoexec.cfg", fs_basedir->string, dir);
 #endif
 	else
 #ifdef __unix__
 		end = fs_base_searchpaths;
-	
-	// search through all the paths for an autoexec.cfg file	
+
+	// search through all the paths for an autoexec.cfg file
 	for (s = fs_searchpaths ; s != end ; s = s->next)
 	{
 		if (s->pack)
 			continue;
 
-		Com_sprintf(name, sizeof(name), "%s/autoexec.cfg", s->filename); 
+		Com_sprintf(name, sizeof(name), "%s/autoexec.cfg", s->filename);
 
 		if (Sys_FindFirst(name, 0, SFF_SUBDIR | SFF_HIDDEN | SFF_SYSTEM))
 		{
@@ -718,7 +709,7 @@ void FS_ExecAutoexec (void)
 		Sys_FindClose();
 	}
 #else
-		Com_sprintf(name, sizeof(name), "%s/%s/autoexec.cfg", fs_basedir->string, BASEDIRNAME); 
+		Com_sprintf(name, sizeof(name), "%s/%s/autoexec.cfg", fs_basedir->string, BASEDIRNAME);
 	if (Sys_FindFirst(name, 0, SFF_SUBDIR | SFF_HIDDEN | SFF_SYSTEM))
 		Cbuf_AddText ("exec autoexec.cfg\n");
 	Sys_FindClose();
@@ -776,8 +767,6 @@ void FS_SetGamedir (char *dir)
 	else
 	{
 		Cvar_FullSet ("gamedir", dir, CVAR_SERVERINFO|CVAR_NOSET);
-		if (fs_cddir->string[0])
-			FS_AddGameDirectory (va("%s/%s", fs_cddir->string, dir) );
 		FS_AddGameDirectory (va("%s/%s", fs_basedir->string, dir) );
 #ifdef __unix__
 		FS_AddHomeAsGameDirectory(dir);
@@ -920,7 +909,7 @@ void FS_Dir_f( void )
 
 		while ( *tmp != 0 )
 		{
-			if ( *tmp == '\\' ) 
+			if ( *tmp == '\\' )
 				*tmp = '/';
 			tmp++;
 		}
@@ -1028,15 +1017,6 @@ void FS_InitFilesystem (void)
 	fs_basedir = Cvar_Get ("basedir", ".", CVAR_NOSET);
 
 	//
-	// cddir <path>
-	// Logically concatenates the cddir after the basedir for 
-	// allows the game to run from outside the data tree
-	//
-	fs_cddir = Cvar_Get ("cddir", "", CVAR_NOSET);
-	if (fs_cddir->string[0])
-		FS_AddGameDirectory (va("%s/"BASEDIRNAME, fs_cddir->string) );
-
-	//
 	// start up with baseq2 by default
 	//
 	FS_AddGameDirectory (va("%s/"BASEDIRNAME, fs_basedir->string) );
@@ -1052,7 +1032,7 @@ void FS_InitFilesystem (void)
 	if (fs_gamedirvar->string[0])
 		FS_SetGamedir (fs_gamedirvar->string);
 	else
-		FS_SetGamedir ("arena"); 
+		FS_SetGamedir ("arena");
 }
 
 

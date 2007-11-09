@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -47,6 +47,28 @@ cvar_t  *excessive;
 cvar_t  *grapple;
 cvar_t  *classbased;
 
+//duel mode
+cvar_t	*g_duel;
+
+cvar_t	*g_losehealth;
+cvar_t	*g_losehealth_num;
+
+//weapons
+cvar_t	*wep_selfdmgmulti;
+
+cvar_t	*wep_disruptor_dmg;
+cvar_t	*wep_disruptor_kick;
+
+//health/max health/max ammo
+cvar_t	*g_spawnhealth;
+cvar_t	*g_maxhealth;
+cvar_t	*g_maxbullets;
+cvar_t	*g_maxshells;
+cvar_t	*g_maxrockets;
+cvar_t	*g_maxgrenades;
+cvar_t	*g_maxcells;
+cvar_t	*g_maxslugs;
+
 //quick weapon change
 cvar_t  *quickweap;
 
@@ -56,6 +78,9 @@ cvar_t  *camptime;
 
 //warmup
 cvar_t  *warmuptime;
+
+//spawn protection
+cvar_t  *g_spawnprotect;
 
 //joust mode
 cvar_t  *joustmode;
@@ -111,10 +136,6 @@ void ClientDisconnect (edict_t *ent);
 void ClientBegin (edict_t *ent);
 void ClientCommand (edict_t *ent);
 void RunEntity (edict_t *ent);
-void WriteGame (char *filename, qboolean autosave);
-void ReadGame (char *filename);
-void WriteLevel (char *filename);
-void ReadLevel (char *filename);
 void InitGame (void);
 void G_RunFrame (void);
 
@@ -147,11 +168,6 @@ game_export_t *GetGameAPI (game_import_t *import)
 	globals.Init = InitGame;
 	globals.Shutdown = ShutdownGame;
 	globals.SpawnEntities = SpawnEntities;
-
-	globals.WriteGame = WriteGame;
-	globals.ReadGame = ReadGame;
-	globals.WriteLevel = WriteLevel;
-	globals.ReadLevel = ReadLevel;
 
 	globals.ClientThink = ClientThink;
 	globals.ClientConnect = ClientConnect;
@@ -230,14 +246,14 @@ Z_Free
 ========================
 */
 void Z_Free (void *ptr)
-{       
+{
 	zhead_t *z;
 
 	z = ((zhead_t *)ptr) - 1;
 
 	if (z->magic != Z_MAGIC)
 		Sys_Error (ERR_FATAL, "Z_Free: bad magic");
- 
+
 	z->prev->next = z->next;
 	z->next->prev = z->prev;
 
@@ -361,7 +377,7 @@ void EndDMLevel (void)
 		free(s);
 	}
 
-	if((int)(ctf->value)) { //wasn't in the dedicated list 
+	if((int)(ctf->value)) { //wasn't in the dedicated list
 		BeginIntermission (CreateTargetChangeLevel (level.mapname));
 		return;
 	}
@@ -447,8 +463,8 @@ void EndDMLevel (void)
 			else if(mapnames[0][0]) //no more maps, repeat list
 				BeginIntermission (CreateTargetChangeLevel (mapnames[0]) );
 		}
-	}			
-	
+	}
+
 	if (level.nextmap[0]) // go to a specific map
 		BeginIntermission (CreateTargetChangeLevel (level.nextmap) );
 	else {	// search for a changelevel
@@ -475,7 +491,7 @@ void CheckNeedPass (void)
 
 	// if password or spectator_password has changed, update needpass
 	// as needed
-	if (password->modified || spectator_password->modified) 
+	if (password->modified || spectator_password->modified)
 	{
 		password->modified = spectator_password->modified = false;
 
@@ -532,14 +548,14 @@ void ResetLevel (void) //for resetting players and items after warmup
 		{
 			if (!item->classname)
 				continue;
-		
+
 			if (!strcmp(item->classname, ent->classname))
 			{	// found it
 				DoRespawn(ent);
 				break;
 			}
 		}
-		
+
 	}
 	return;
 }
@@ -557,7 +573,7 @@ void CheckDMRules (void)
 	edict_t		*cl_ent;
 
 	if(!tca->value && !ctf->value && !cp->value && !((int)(dmflags->value) & DF_SKINTEAMS)) {
-		if(level.time <= warmuptime->value) { 
+		if(level.time <= warmuptime->value) {
 				if((warmuptime->value - level.time ) == 3) {
 					for (i=0 ; i<maxclients->value ; i++)
 					{
@@ -585,7 +601,7 @@ void CheckDMRules (void)
 						gi.sound (cl_ent, CHAN_AUTO, gi.soundindex("misc/one.wav"), 1, ATTN_STATIC, 0);
 					}
 				}
-				if(level.time == warmuptime->value) { 
+				if(level.time == warmuptime->value) {
 					for (i=0 ; i<maxclients->value ; i++)
 					{
 					cl_ent = g_edicts + 1 + i;
@@ -612,7 +628,7 @@ void CheckDMRules (void)
 							safe_centerprintf(cl_ent, "%i...\n", int_time);
 					}
 				}
-		}			
+		}
 	}
 
 	if (level.intermissiontime)
@@ -630,10 +646,10 @@ void CheckDMRules (void)
 			return;
 		}
 	}
-	
+
 	if (fraglimit->value && ((tca->value || ctf->value || cp->value || ((int)(dmflags->value) & DF_SKINTEAMS)) || level.time > warmuptime->value))
 	{
-		
+
 		//team scores
 		if (((int)(dmflags->value) & DF_SKINTEAMS) || ctf->value || cp->value) //it's all about the team!
 		{
@@ -654,7 +670,7 @@ void CheckDMRules (void)
 
 				EndDMLevel();
 				return;
-			}			
+			}
 		}
 		else {
 			top_score = 0;
@@ -737,7 +753,7 @@ void CheckDMRules (void)
 	}
 	if(tca->value) {
 		if(blue_team_score == 0) {
-				
+
 			safe_bprintf(PRINT_HIGH, "Red Team wins!\n");
 
 			bot_won = 0; //we don't care if it's a bot that wins
@@ -746,14 +762,14 @@ void CheckDMRules (void)
 			return;
 		}
 		if(red_team_score == 0) {
-			
+
 			safe_bprintf(PRINT_HIGH, "Blue Team wins!\n");
 
 			bot_won = 0; //we don't care if it's a bot that wins
 
 			EndDMLevel();
 			return;
-		}		
+		}
 	}
 }
 
@@ -769,7 +785,7 @@ void ExitLevel (void)
 	edict_t	*ent;
 	char	command [256];
 
-	Com_sprintf (command, sizeof(command), "gamemap \"%s\"\n", level.changemap);
+	Com_sprintf (command, sizeof(command), "map \"%s\"\n", level.changemap);
 	gi.AddCommandString (command);
 	level.changemap = NULL;
 	level.exitintermission = 0;
@@ -853,7 +869,7 @@ void G_RunFrame (void)
 		{
 			ClientBeginServerFrame (ent);
 // ACEBOT_ADD
-		
+
 // ACEBOT_END
 		}
 

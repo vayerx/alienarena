@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -35,7 +35,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "input.h"
 #include "keys.h"
 #include "console.h"
-#include "cdaudio.h"
 
 //=============================================================================
 
@@ -232,6 +231,8 @@ typedef struct
 	int			downloadnumber;
 	dltype_t	downloadtype;
 	int			downloadpercent;
+	char		downloadurl[MAX_OSPATH];  // for http downloads
+	qboolean	downloadhttp;
 
 // demo recording info must be here, so it isn't cleared on level change
 	qboolean	demorecording;
@@ -294,7 +295,7 @@ extern	cvar_t	*cl_vwep;
 
 extern  cvar_t  *background_music;
 extern  cvar_t  *cl_nobrainlets;
-extern  cvar_t		*enginemode;
+
 typedef struct
 {
 	int		key;				// so entities can reuse same entry
@@ -311,7 +312,7 @@ extern	cdlight_t	cl_dlights[MAX_DLIGHTS];
 
 // the cl_parse_entities must be large enough to hold UPDATE_BACKUP frames of
 // entities, so that when a delta compressed message arives from the server
-// it can be un-deltad from the original 
+// it can be un-deltad from the original
 #define	MAX_PARSE_ENTITIES	1024
 extern	entity_state_t	cl_parse_entities[MAX_PARSE_ENTITIES];
 
@@ -457,6 +458,7 @@ void CL_ParseLayout (void);
 //
 // cl_main
 //
+extern qboolean send_packet_now;
 void CL_Init (void);
 
 void CL_FixUpGender(void);
@@ -583,6 +585,10 @@ void CL_BigTeleportParticles (vec3_t org);
 void CL_RocketTrail (vec3_t start, vec3_t end, centity_t *old);
 void CL_ShipExhaust (vec3_t start, vec3_t end, centity_t *old);
 void CL_RocketExhaust (vec3_t start, vec3_t end, centity_t *old);
+void CL_BeamgunMark(vec3_t org, vec3_t dir, float dur);
+void CL_BulletMarks(vec3_t org, vec3_t dir);
+void CL_VaporizerMarks(vec3_t org, vec3_t dir);
+void CL_BlasterMark(vec3_t org, vec3_t dir);
 void CL_DiminishingTrail (vec3_t start, vec3_t end, centity_t *old, int flags);
 void CL_BfgParticles (entity_t *ent);
 void CL_AddParticles (void);
@@ -620,10 +626,21 @@ unsigned long *x86_TimerGetHistogram( void );
 // cl_view, cl_scrn
 //
 int map_pic_loaded;
-
+int stringLen (char *string);
 //
 //mouse
 //
 void refreshCursorLink (void);
 void refreshCursorMenu (void);
 void M_Think_MouseCursor (void);
+
+//
+//cl_http.c
+//
+void CL_InitHttpDownload(void);
+void CL_HttpDownloadCleanup(void);
+qboolean CL_HttpDownload(void);
+void CL_HttpDownloadThink(void);
+void CL_ShutdownHttpDownload(void);
+
+

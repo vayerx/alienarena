@@ -11,7 +11,7 @@ CC?=gcc
 OPTIMIZED_CFLAGS?=yes
 
 # Integer from 0 to 3, controls GCC's -O CFLAG.
-OPTIM_LVL?=3
+OPTIM_LVL?=2
 
 # Path to standard libraries (e.g. jpeg).
 LOCALBASE?=/usr/local
@@ -51,12 +51,12 @@ else
 	_LIB := lib
 endif
 
-BASE_CFLAGS=$(CFLAGS) -Dstricmp=strcasecmp -D_stricmp=strcasecmp -I$(X11BASE)/include
+BASE_CFLAGS=$(CFLAGS) -Dstricmp=strcasecmp -D_stricmp=strcasecmp -I$(X11BASE)/include -fno-strict-aliasing
 
 RELEASE_CFLAGS=$(BASE_CFLAGS)
 
 ifeq ($(strip $(OPTIMIZED_CFLAGS)),yes)
-RELEASE_CFLAGS+=-O$(OPTIM_LVL) -funroll-loops -fomit-frame-pointer \
+RELEASE_CFLAGS+=-O$(OPTIM_LVL) -fomit-frame-pointer \
 		-ftree-vectorize -fexpensive-optimizations
 
 ifeq ($(OSTYPE),linux)
@@ -82,6 +82,10 @@ endif
 endif
 endif
 
+ifeq ($(shell curl -V | grep -c .), 3)
+	BASE_CFLAGS += -DHAVE_CURL
+endif
+
 ARENA_CFLAGS=-DARENA
 
 DEBUG_CFLAGS=$(BASE_CFLAGS) -g -ggdb
@@ -89,7 +93,7 @@ DEBUG_CFLAGS=$(BASE_CFLAGS) -g -ggdb
 LDFLAGS+=-lm
 # In FreeBSD, dlopen() is in libc.
 ifeq ($(OSTYPE),linux)
-LDFLAGS+=-ldl
+	LDFLAGS+=-ldl
 endif
 
 GLXLDFLAGS=-L$(X11BASE)/$(_LIB) -L$(LOCALBASE)/$(_LIB) -lX11 -lXext -lXxf86dga -lXxf86vm -lm -ljpeg -lGL -lGLU
@@ -100,6 +104,9 @@ SDLLDFLAGS=$(shell sdl-config --libs)
 SHLIBEXT=so
 SHLIBCFLAGS=-fPIC
 SHLIBLDFLAGS=-shared
+
+CURLCFLAGS=$(shell curl-config --cflags)
+CURLLDFLAGS=$(shell curl-config --libs)
 
 DO_CC=$(CC) $(CFLAGS) -o $@ -c $<
 DO_DEBUG_CC=$(CC) $(DEBUG_CFLAGS) -o $@ -c $<
@@ -180,6 +187,7 @@ CODERED_OBJS = \
 	$(BUILDDIR)/client/cl_tent.o \
 	$(BUILDDIR)/client/cl_scrn.o \
 	$(BUILDDIR)/client/cl_view.o \
+	$(BUILDDIR)/client/cl_http.o \
 	$(BUILDDIR)/client/console.o \
 	$(BUILDDIR)/client/keys.o \
 	$(BUILDDIR)/client/menu.o \
@@ -206,7 +214,6 @@ CODERED_OBJS = \
 	$(BUILDDIR)/client/sv_user.o \
 	$(BUILDDIR)/client/sv_world.o \
 	\
-	$(BUILDDIR)/client/cd_unix.o \
 	$(BUILDDIR)/client/q_shunix.o \
 	$(BUILDDIR)/client/vid_menu.o \
 	$(BUILDDIR)/client/vid_so.o \
@@ -249,10 +256,10 @@ CODERED_AS_OBJS = \
 	$(BUILDDIR)/client/snd_mixa.o
 
 $(BUILDDIR)/crx : $(CODERED_OBJS) $(SOUND_OSS_OBJS) $(CODERED_AS_OBJS) $(REF_GL_OBJS) $(REF_GL_GLX_OBJS)
-	$(CC) $(CFLAGS) -o $@ $(CODERED_OBJS) $(SOUND_OSS_OBJS) $(CODERED_AS_OBJS) $(LDFLAGS) $(REF_GL_OBJS) $(REF_GL_GLX_OBJS) $(GLXLDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(CODERED_OBJS) $(SOUND_OSS_OBJS) $(CODERED_AS_OBJS) $(LDFLAGS) $(REF_GL_OBJS) $(REF_GL_GLX_OBJS) $(GLXLDFLAGS) $(CURLLDFLAGS)
 
 $(BUILDDIR)/crx.sdl : $(CODERED_OBJS) $(SOUND_SDL_OBJS) $(CODERED_AS_OBJS) $(REF_GL_OBJS) $(REF_GL_GLX_OBJS)
-	$(CC) $(CFLAGS) -o $@ $(CODERED_OBJS) $(SOUND_SDL_OBJS) $(CODERED_AS_OBJS) $(LDFLAGS) $(REF_GL_OBJS) $(REF_GL_GLX_OBJS) $(GLXLDFLAGS) $(SDLLDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(CODERED_OBJS) $(SOUND_SDL_OBJS) $(CODERED_AS_OBJS) $(LDFLAGS) $(REF_GL_OBJS) $(REF_GL_GLX_OBJS) $(GLXLDFLAGS) $(SDLLDFLAGS) $(CURLLDFLAGS)
 
 $(BUILDDIR)/client/cl_cin.o :     $(CLIENT_DIR)/cl_cin.c
 	$(DO_CC)
@@ -365,13 +372,10 @@ $(BUILDDIR)/client/sv_user.o :    $(SERVER_DIR)/sv_user.c
 $(BUILDDIR)/client/sv_world.o :   $(SERVER_DIR)/sv_world.c
 	$(DO_CC)
 
-$(BUILDDIR)/client/cd_unix.o :   $(UNIX_DIR)/cd_unix.c
-	$(DO_CC)
-
 $(BUILDDIR)/client/q_shunix.o :  $(UNIX_DIR)/q_shunix.c
 	$(DO_O_CC)
 
-$(BUILDDIR)/client/vid_menu.o :   $(UNIX_DIR)/vid_menu.c
+$(BUILDDIR)/client/vid_menu.o :   $(CLIENT_DIR)/vid_menu.c
 	$(DO_CC)
 
 $(BUILDDIR)/client/vid_so.o :     $(UNIX_DIR)/vid_so.c
@@ -394,6 +398,9 @@ $(BUILDDIR)/client/glob.o :       $(UNIX_DIR)/glob.c
 
 $(BUILDDIR)/client/net_udp.o :    $(UNIX_DIR)/net_udp.c
 	$(DO_CC)
+
+$(BUILDDIR)/client/cl_http.o :   $(CLIENT_DIR)/cl_http.c
+	$(DO_CC) $(CURLCFLAGS)
 
 $(BUILDDIR)/ref_gl/r_bloom.o :        $(REF_GL_DIR)/r_bloom.c
 	$(DO_GL_SHLIB_CC)
@@ -478,8 +485,7 @@ CRDED_OBJS = \
 	$(BUILDDIR)/ded/q_shared.o \
 	$(BUILDDIR)/ded/pmove.o \
 	\
-	$(BUILDDIR)/ded/cl_null.o \
-	$(BUILDDIR)/ded/cd_null.o
+	$(BUILDDIR)/ded/cl_null.o
 
 $(BUILDDIR)/crded : $(CRDED_OBJS)
 	$(CC) $(CFLAGS) -o $@ $(CRDED_OBJS) $(LDFLAGS)
@@ -550,10 +556,7 @@ $(BUILDDIR)/ded/glob.o :       $(UNIX_DIR)/glob.c
 $(BUILDDIR)/ded/net_udp.o :    $(UNIX_DIR)/net_udp.c
 	$(DO_DED_CC)
 
-$(BUILDDIR)/ded/cd_null.o     : $(NULL_DIR)/cd_null.c    
-	$(DO_DED_CC)
-
-$(BUILDDIR)/ded/cl_null.o     : $(NULL_DIR)/cl_null.c    
+$(BUILDDIR)/ded/cl_null.o     : $(NULL_DIR)/cl_null.c
 	$(DO_DED_CC)
 
 #############################################################################
@@ -570,12 +573,13 @@ GAME_OBJS = \
 	$(BUILDDIR)/game/acebot_spawn.o \
 	$(BUILDDIR)/game/c_cam.o \
 	$(BUILDDIR)/game/cow.o \
-	$(BUILDDIR)/game/ctf.o \
 	$(BUILDDIR)/game/q_shared.o \
 	$(BUILDDIR)/game/g_ai.o \
 	$(BUILDDIR)/game/g_chase.o \
 	$(BUILDDIR)/game/g_cmds.o \
 	$(BUILDDIR)/game/g_combat.o \
+	$(BUILDDIR)/game/g_ctf.o \
+	$(BUILDDIR)/game/g_deathball.o \
 	$(BUILDDIR)/game/g_func.o \
 	$(BUILDDIR)/game/g_items.o \
 	$(BUILDDIR)/game/g_main.o \
@@ -589,14 +593,14 @@ GAME_OBJS = \
 	$(BUILDDIR)/game/g_trigger.o \
 	$(BUILDDIR)/game/g_utils.o \
 	$(BUILDDIR)/game/g_weapon.o \
+	$(BUILDDIR)/game/g_vehicles.o \
 	$(BUILDDIR)/game/m_move.o \
 	$(BUILDDIR)/game/p_client.o \
 	$(BUILDDIR)/game/p_hud.o \
 	$(BUILDDIR)/game/p_light.o \
 	$(BUILDDIR)/game/p_trail.o \
 	$(BUILDDIR)/game/p_view.o \
-	$(BUILDDIR)/game/p_weapon.o \
-	$(BUILDDIR)/game/vehicles.o
+	$(BUILDDIR)/game/p_weapon.o
 
 
 
@@ -631,9 +635,6 @@ $(BUILDDIR)/game/c_cam.o :        $(GAME_DIR)/c_cam.c
 $(BUILDDIR)/game/cow.o :        $(GAME_DIR)/cow.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/game/ctf.o :        $(GAME_DIR)/ctf.c
-	$(DO_SHLIB_CC)
-
 $(BUILDDIR)/game/g_ai.o :        $(GAME_DIR)/g_ai.c
 	$(DO_SHLIB_CC)
 
@@ -644,6 +645,12 @@ $(BUILDDIR)/game/g_cmds.o :      $(GAME_DIR)/g_cmds.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/game/g_combat.o :    $(GAME_DIR)/g_combat.c
+	$(DO_SHLIB_CC)
+
+$(BUILDDIR)/game/g_ctf.o :        $(GAME_DIR)/g_ctf.c
+	$(DO_SHLIB_CC)
+
+$(BUILDDIR)/game/g_deathball.o :    $(GAME_DIR)/g_deathball.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/game/g_func.o :      $(GAME_DIR)/g_func.c
@@ -682,6 +689,9 @@ $(BUILDDIR)/game/g_trigger.o :   $(GAME_DIR)/g_trigger.c
 $(BUILDDIR)/game/g_utils.o :     $(GAME_DIR)/g_utils.c
 	$(DO_SHLIB_CC)
 
+$(BUILDDIR)/game/g_vehicles.o :    $(GAME_DIR)/g_vehicles.c
+	$(DO_SHLIB_CC)
+
 $(BUILDDIR)/game/g_weapon.o :    $(GAME_DIR)/g_weapon.c
 	$(DO_SHLIB_CC)
 
@@ -706,9 +716,6 @@ $(BUILDDIR)/game/p_view.o :      $(GAME_DIR)/p_view.c
 $(BUILDDIR)/game/p_weapon.o :    $(GAME_DIR)/p_weapon.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/game/vehicles.o :    $(GAME_DIR)/vehicles.c
-	$(DO_SHLIB_CC)
-
 $(BUILDDIR)/game/q_shared.o :    $(GAME_DIR)/q_shared.c
 	$(DO_SHLIB_DEBUG_CC)
 
@@ -729,11 +736,12 @@ ARENA_OBJS = \
 	$(BUILDDIR)/arena/q_shared.o \
 	$(BUILDDIR)/arena/c_cam.o \
 	$(BUILDDIR)/arena/cow.o \
-	$(BUILDDIR)/arena/ctf.o \
 	$(BUILDDIR)/arena/g_ai.o \
 	$(BUILDDIR)/arena/g_chase.o \
 	$(BUILDDIR)/arena/g_cmds.o \
 	$(BUILDDIR)/arena/g_combat.o \
+	$(BUILDDIR)/arena/g_ctf.o \
+	$(BUILDDIR)/arena/g_deathball.o \
 	$(BUILDDIR)/arena/g_func.o \
 	$(BUILDDIR)/arena/g_items.o \
 	$(BUILDDIR)/arena/g_main.o \
@@ -746,6 +754,7 @@ ARENA_OBJS = \
 	$(BUILDDIR)/arena/g_target.o \
 	$(BUILDDIR)/arena/g_trigger.o \
 	$(BUILDDIR)/arena/g_utils.o \
+	$(BUILDDIR)/arena/g_vehicles.o \
 	$(BUILDDIR)/arena/g_weapon.o \
 	$(BUILDDIR)/arena/m_move.o \
 	$(BUILDDIR)/arena/p_client.o \
@@ -753,8 +762,7 @@ ARENA_OBJS = \
 	$(BUILDDIR)/arena/p_light.o \
 	$(BUILDDIR)/arena/p_trail.o \
 	$(BUILDDIR)/arena/p_view.o \
-	$(BUILDDIR)/arena/p_weapon.o \
-	$(BUILDDIR)/arena/vehicles.o
+	$(BUILDDIR)/arena/p_weapon.o
 
 $(BUILDDIR)/arena/game.$(SHLIBEXT) : $(ARENA_OBJS)
 	$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(ARENA_OBJS)
@@ -787,9 +795,6 @@ $(BUILDDIR)/arena/c_cam.o :        $(ARENA_DIR)/c_cam.c
 $(BUILDDIR)/arena/cow.o :        $(ARENA_DIR)/cow.c
 	$(DO_ARENA_SHLIB_CC)
 
-$(BUILDDIR)/arena/ctf.o :        $(ARENA_DIR)/ctf.c
-	$(DO_ARENA_SHLIB_CC)
-
 $(BUILDDIR)/arena/g_ai.o :        $(ARENA_DIR)/g_ai.c
 	$(DO_ARENA_SHLIB_CC)
 
@@ -800,6 +805,12 @@ $(BUILDDIR)/arena/g_cmds.o :      $(ARENA_DIR)/g_cmds.c
 	$(DO_ARENA_SHLIB_CC)
 
 $(BUILDDIR)/arena/g_combat.o :    $(ARENA_DIR)/g_combat.c
+	$(DO_ARENA_SHLIB_CC)
+
+$(BUILDDIR)/arena/g_ctf.o :        $(ARENA_DIR)/g_ctf.c
+	$(DO_ARENA_SHLIB_CC)
+
+$(BUILDDIR)/arena/g_deathball.o :        $(ARENA_DIR)/g_deathball.c
 	$(DO_ARENA_SHLIB_CC)
 
 $(BUILDDIR)/arena/g_func.o :      $(ARENA_DIR)/g_func.c
@@ -841,6 +852,9 @@ $(BUILDDIR)/arena/g_utils.o :     $(ARENA_DIR)/g_utils.c
 $(BUILDDIR)/arena/g_weapon.o :    $(ARENA_DIR)/g_weapon.c
 	$(DO_ARENA_SHLIB_CC)
 
+$(BUILDDIR)/arena/g_vehicles.o :    $(ARENA_DIR)/g_vehicles.c
+	$(DO_ARENA_SHLIB_CC)
+
 $(BUILDDIR)/arena/m_move.o :      $(ARENA_DIR)/m_move.c
 	$(DO_ARENA_SHLIB_CC)
 
@@ -862,9 +876,6 @@ $(BUILDDIR)/arena/p_view.o :      $(ARENA_DIR)/p_view.c
 $(BUILDDIR)/arena/p_weapon.o :    $(ARENA_DIR)/p_weapon.c
 	$(DO_ARENA_SHLIB_CC)
 
-$(BUILDDIR)/arena/vehicles.o :    $(ARENA_DIR)/vehicles.c
-	$(DO_ARENA_SHLIB_CC)
-
 $(BUILDDIR)/arena/q_shared.o :    $(ARENA_DIR)/q_shared.c
 	$(DO_SHLIB_DEBUG_CC)
 
@@ -872,7 +883,6 @@ $(BUILDDIR)/arena/q_shared.o :    $(ARENA_DIR)/q_shared.c
 #############################################################################
 # MISC
 #############################################################################
-#Needs work.
 clean: clean-debug clean-release
 
 clean-debug:
@@ -899,22 +909,22 @@ distclean: clean
 
 install:
 	cp $(BUILD_RELEASE_DIR)/cr* ../
-	cp $(BUILD_RELEASE_DIR)/game.so ../data1/
-	cp $(BUILD_RELEASE_DIR)/game.so ../arena/
+	cp $(BUILD_RELEASE_DIR)/game.$(SHLIBEXT) ../data1/
+	cp $(BUILD_RELEASE_DIR)/game.$(SHLIBEXT) ../arena/
 	strip ../crded
 	strip ../crx
 	strip ../crx.sdl
-	strip ../arena/game.so
-	strip ../data1/game.so
+	strip ../arena/game.$(SHLIBEXT)
+	strip ../data1/game.$(SHLIBEXT)
 
 install-debug:
 	cp $(BUILD_DEBUG_DIR)/cr* ../
-	cp $(BUILD_DEBUG_DIR)/game.so ../data1/
-	cp $(BUILD_DEBUG_DIR)/game.so ../arena/
+	cp $(BUILD_DEBUG_DIR)/game.$(SHLIBEXT) ../data1/
+	cp $(BUILD_DEBUG_DIR)/game.$(SHLIBEXT) ../arena/
 
 uninstall:
-	rm -f ../data1/game.so
-	rm -f ../arena/game.so
+	rm -f ../data1/game.$(SHLIBEXT)
+	rm -f ../arena/game.$(SHLIBEXT)
 	rm -f ../crx
 	rm -f ../crx.sdl
 	rm -f ../crded

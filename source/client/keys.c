@@ -25,7 +25,6 @@ key up events are sent even if in console mode
 
 */
 
-
 #define		MAXCMDLINE	256
 char	key_lines[32][MAXCMDLINE];
 int		key_linepos;
@@ -163,27 +162,30 @@ keyname_t keynames[] =
 ==============================================================================
 */
 
+qboolean        Cmd_IsComplete(char *cmd);
+extern void		Q_strncpyz( char *dest, const char *src, size_t size );
 void CompleteCommand (void)
 {
-	char	*cmd, *s;
+	char           *cmd, *s;
 
-	s = key_lines[edit_line]+1;
-	if (*s == '\\' || *s == '/')
-		s++;
+        s = key_lines[edit_line] + 1;
+        if (*s == '\\' || *s == '/')
+                s++;
 
-	cmd = Cmd_CompleteCommand (s);
-	if (!cmd)
-		cmd = Cvar_CompleteVariable (s);
-	if (cmd)
-	{
-		key_lines[edit_line][1] = '/';
-		strcpy (key_lines[edit_line]+2, cmd);
-		key_linepos = strlen(cmd)+2;
-		key_lines[edit_line][key_linepos] = ' ';
-		key_linepos++;
-		key_lines[edit_line][key_linepos] = 0;
-		return;
-	}
+        cmd = Cmd_CompleteCommand(s);
+        if (cmd) {
+                key_lines[edit_line][1] = '/';
+                Q_strncpyz(key_lines[edit_line] + 2, cmd, sizeof(key_lines[0]));
+                key_linepos = strlen(cmd) + 2;
+                if (Cmd_IsComplete(cmd)) {
+                        key_lines[edit_line][key_linepos] = ' ';
+                        key_linepos++;
+                        key_lines[edit_line][key_linepos] = 0;
+                } else {
+                        key_lines[edit_line][key_linepos] = 0;
+                }
+                return;
+        }
 }
 
 /*
@@ -348,13 +350,13 @@ void Key_Console (int key)
 		return;
 	}
 
-	if (key == K_PGUP || key == K_KP_PGUP )
+	if (key == K_PGUP || key == K_KP_PGUP || key == K_MWHEELUP )
 	{
 		con.display -= 2;
 		return;
 	}
 
-	if (key == K_PGDN || key == K_KP_PGDN ) 
+	if (key == K_PGDN || key == K_KP_PGDN || key == K_MWHEELDOWN ) 
 	{
 		con.display += 2;
 		if (con.display > con.current)
@@ -688,6 +690,8 @@ void Key_Init (void)
 	consolekeys[K_KP_PLUS] = true;
 	consolekeys[K_KP_MINUS] = true;
 	consolekeys[K_KP_5] = true;
+	consolekeys[K_MWHEELUP] = true;
+	consolekeys[K_MWHEELDOWN] = true;
 
 	consolekeys['`'] = false;
 	consolekeys['~'] = false;
@@ -739,6 +743,7 @@ Called by the system between frames for both key up and key down events
 Should NOT be called during an interrupt!
 ===================
 */
+
 void Key_Event (int key, qboolean down, unsigned time)
 {
 	char	*kb;
@@ -781,6 +786,11 @@ void Key_Event (int key, qboolean down, unsigned time)
 	{
 		if (!down)
 			return;
+		if (cls.key_dest == key_console && cls.state == ca_disconnected) {
+			M_Menu_Main_f ();
+			return;
+		}
+			
 		Con_ToggleConsole_f ();
 		return;
 	}

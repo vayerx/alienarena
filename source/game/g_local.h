@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -87,9 +87,9 @@ typedef enum
 	DAMAGE_AIM			// auto targeting recognizes this
 } damage_t;
 
-typedef enum 
+typedef enum
 {
-	WEAPON_READY, 
+	WEAPON_READY,
 	WEAPON_ACTIVATING,
 	WEAPON_DROPPING,
 	WEAPON_FIRING
@@ -227,12 +227,12 @@ typedef struct
 #define IT_POWERUP		16
 
 // gitem_t->weapmodel for weapons indicates model index
-#define WEAP_BLASTER			1 
-#define WEAP_SMARTGUN			2 
-#define WEAP_CHAINGUN			3 
-#define WEAP_FLAMETHROWER		5 
-#define WEAP_ROCKETLAUNCHER		8 
-#define WEAP_DISRUPTOR			9 
+#define WEAP_BLASTER			1
+#define WEAP_SMARTGUN			2
+#define WEAP_CHAINGUN			3
+#define WEAP_FLAMETHROWER		5
+#define WEAP_ROCKETLAUNCHER		8
+#define WEAP_DISRUPTOR			9
 #define WEAP_BEAMGUN			10
 #define WEAP_VAPORIZER			11
 #define WEAP_BOMBER				12
@@ -295,6 +295,9 @@ typedef struct
 
 	// items
 	int			num_items;
+
+	//bots
+	int			num_bots;
 
 	qboolean	autosaved;
 } game_locals_t;
@@ -510,13 +513,13 @@ extern	int	meansOfDeath;
 
 extern	edict_t			*g_edicts;
 
-#define	FOFS(x) (int)&(((edict_t *)0)->x)
-#define	STOFS(x) (int)&(((spawn_temp_t *)0)->x)
-#define	LLOFS(x) (int)&(((level_locals_t *)0)->x)
-#define	CLOFS(x) (int)&(((gclient_t *)0)->x)
+#define FOFS(x)(ptrdiff_t)&(((edict_t *)0)->x)
+#define STOFS(x)(ptrdiff_t)&(((spawn_temp_t *)0)->x)
+#define LLOFS(x)(ptrdiff_t)&(((level_locals_t *)0)->x)
+#define CLOFS(x)(ptrdiff_t)&(((gclient_t *)0)->x)
 
-#define random()	((rand () & 0x7fff) / ((float)0x7fff))
-#define crandom()	(2.0 * (random() - 0.5))
+#define random() ((rand() & 0x7fff) / ((float)0x7fff))
+#define crandom() (2.0 * (random() - 0.5))
 
 extern	cvar_t	*maxentities;
 extern	cvar_t	*deathmatch;
@@ -573,6 +576,28 @@ extern  cvar_t  *excessive;
 extern  cvar_t  *grapple;
 extern  cvar_t  *classbased;
 
+//duel mode
+extern	cvar_t	*g_duel;
+
+extern	cvar_t	*g_losehealth;
+extern	cvar_t	*g_losehealth_num;
+
+//weapons
+extern	cvar_t	*wep_selfdmgmulti;
+
+extern	cvar_t	*wep_disruptor_dmg;
+extern	cvar_t	*wep_disruptor_kick;
+
+//health/max health/max ammo
+extern	cvar_t	*g_spawnhealth;
+extern	cvar_t	*g_maxhealth;
+extern	cvar_t	*g_maxbullets;
+extern	cvar_t	*g_maxshells;
+extern	cvar_t	*g_maxrockets;
+extern	cvar_t	*g_maxgrenades;
+extern	cvar_t	*g_maxcells;
+extern	cvar_t	*g_maxslugs;
+
 //quick weapon change
 extern  cvar_t  *quickweap;
 
@@ -582,6 +607,9 @@ extern  cvar_t  *camptime;
 
 //warmup time
 extern cvar_t   *warmuptime;
+
+//spawn protection
+extern cvar_t   *g_spawnprotect;
 
 //jousting
 extern cvar_t   *joustmode;
@@ -605,7 +633,7 @@ extern cvar_t   *joustmode;
 #define FFL_NOSPAWN			2
 
 typedef enum {
-	F_INT, 
+	F_INT,
 	F_FLOAT,
 	F_LSTRING,			// string on disk, pointer in memory, TAG_LEVEL
 	F_GSTRING,			// string on disk, pointer in memory, TAG_GAME
@@ -656,13 +684,18 @@ void Think_Weapon (edict_t *ent);
 int ArmorIndex (edict_t *ent);
 int PowerArmorType (edict_t *ent);
 gitem_t	*GetItemByIndex (int index);
-qboolean Add_Ammo (edict_t *ent, gitem_t *item, int count);
+qboolean Add_Ammo (edict_t *ent, gitem_t *item, int count, qboolean weapon, qboolean dropped);
 void Touch_Item (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf);
+
 //CTF
 void CTFDeadDropFlag(edict_t *self);
 void CTFEffects(edict_t *player);
 void CTFScoreboardMessage (edict_t *ent, edict_t *killer);
 void CTFPrecache(void);
+void CTFFlagSetup (edict_t *ent);
+qboolean CTFPickup_Flag (edict_t *ent, edict_t *other);
+qboolean CTFDrop_Flag(edict_t *ent, gitem_t *item);
+
 //Vehicles
 void Reset_player(edict_t *ent);
 void Jet_Explosion(edict_t *ent);
@@ -670,9 +703,17 @@ qboolean Jet_Active(edict_t *ent);
 void Jet_ApplyJet( edict_t *ent, usercmd_t *ucmd );
 qboolean Jet_AvoidGround( edict_t *ent );
 void VehicleDeadDrop(edict_t *self);
+void VehicleSetup (edict_t *ent);
+qboolean Get_in_vehicle (edict_t *ent, edict_t *other);
+qboolean Leave_vehicle(edict_t *ent, gitem_t *item);
+
 //deathball
 void ResetDeathball();
 void DeadDropDeathball(edict_t *self);
+void DeathballSetup (edict_t *ent);
+qboolean Pickup_deathball (edict_t *ent, edict_t *other);
+qboolean DeathballDrop(edict_t *ent, gitem_t *item);
+
 //
 // g_utils.c
 //
@@ -911,6 +952,13 @@ void GetChaseTarget(edict_t *ent);
 #define	ANIM_DEATH		5
 #define	ANIM_REVERSE	6
 
+#define BASE_ROCKETS	10
+#define BASE_SHELLS		10
+#define BASE_CELLS		50
+#define BASE_SLUGS		10
+#define BASE_GRENADES	50
+#define BASE_BULLETS	50
+
 
 // client data that stays across multiple level loads
 typedef struct
@@ -944,7 +992,8 @@ typedef struct
 	int			game_helpchanged;
 	int			helpchanged;
 
-	qboolean	spectator;			// client is a spectator
+	int			spectator;			// client is a spectator
+
 } client_persistant_t;
 
 // client data that stays across deathmatch respawns
@@ -1052,6 +1101,8 @@ struct gclient_s
 	float		sproing_framenum;
 	float		regen_framenum;
 
+	float		losehealth_framenum;
+
 	qboolean	grenade_blew_up;
 	float		grenade_time;
 	int			silencer_shots;
@@ -1068,7 +1119,7 @@ struct gclient_s
 	edict_t		*chase_target;		// player we are chasing
 	qboolean	update_chase;		// need to update chase info?
 
-	//team 
+	//team
 	int			dmteam;
 
 	//chasecam
@@ -1080,7 +1131,7 @@ struct gclient_s
 	qboolean in_vehicle;
 	float	Jet_framenum;   /*burn out time when jet is activated*/
     float	Jet_remaining;  /*remaining fuel time*/
-    float	Jet_next_think; 
+    float	Jet_next_think;
 
 	//deathball
 	qboolean in_deathball;
@@ -1089,12 +1140,15 @@ struct gclient_s
 	void		*ctf_grapple;		// entity of grapple
 	int			ctf_grapplestate;		// true if pulling
 	float		ctf_grapplereleasetime;	// time of grapple release
-	
+
 	//kill streaks
 	int kill_streak; //obviously this *will* get cleared at each respawn in most cases
 
 	//joust attempts - for limiting how many times you can joust at a time
 	int joustattempts;
+
+	float spawnprotecttime;
+	qboolean spawnprotected;
 
 };
 
@@ -1112,7 +1166,7 @@ struct edict_s
 
 	// FIXME: move these fields to a server private sv_entity_t
 	link_t		area;				// linked to a division node or leaf
-	
+
 	int			num_clusters;		// if -1, use headnode instead
 	int			clusternums[MAX_ENT_CLUSTERS];
 	int			headnode;			// unused if num_clusters != -1
@@ -1137,7 +1191,7 @@ struct edict_s
 
 	char		*model;
 	float		freetime;			// sv.time when the object was freed
-	
+
 	//
 	// only used locally in game, not by server
 	//
@@ -1255,9 +1309,9 @@ struct edict_s
 // ACEBOT_ADD
 	qboolean is_bot;
 	qboolean is_jumping;
-	
+
 	// For movement
-	vec3_t move_vector; 
+	vec3_t move_vector;
 	float next_move_time;
 	float wander_timeout;
 	float suicide_timeout;

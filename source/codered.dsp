@@ -94,10 +94,6 @@ LINK32=link.exe
 # PROP Default_Filter "cpp;c;cxx;rc;def;r;odl;hpj;bat;for;f90"
 # Begin Source File
 
-SOURCE=.\win32\cd_win.c
-# End Source File
-# Begin Source File
-
 SOURCE=.\client\cl_cin.c
 # End Source File
 # Begin Source File
@@ -107,6 +103,10 @@ SOURCE=.\client\cl_ents.c
 # Begin Source File
 
 SOURCE=.\client\cl_fx.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\client\cl_http.c
 # End Source File
 # Begin Source File
 
@@ -342,7 +342,7 @@ SOURCE=.\win32\vid_dll.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\win32\vid_menu.c
+SOURCE=.\client\vid_menu.c
 # End Source File
 # Begin Source File
 
@@ -367,10 +367,6 @@ SOURCE=.\ref_gl\anormtab.h
 # Begin Source File
 
 SOURCE=.\qcommon\bspfile.h
-# End Source File
-# Begin Source File
-
-SOURCE=.\client\cdaudio.h
 # End Source File
 # Begin Source File
 
@@ -493,5 +489,9 @@ SOURCE=.\win32\q2.ico
 SOURCE=.\win32\q2.rc
 # End Source File
 # End Group
+# Begin Source File
+
+SOURCE=.\client\curl\libcurl.lib
+# End Source File
 # End Target
 # End Project

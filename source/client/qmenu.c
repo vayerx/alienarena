@@ -84,6 +84,11 @@ void Field_Draw( menufield_s *f )
 {
 	int i;
 	char tempbuffer[128]="";
+	int charscale;
+
+	charscale = (float)(viddef.height)*8/600;
+	if(charscale < 8)
+		charscale = 8;
 
 	color_offset = 0;
 
@@ -92,19 +97,19 @@ void Field_Draw( menufield_s *f )
 
 	strncpy( tempbuffer, f->buffer + f->visible_offset, f->visible_length);
 
-	Draw_Char( f->generic.x + f->generic.parent->x + 16, f->generic.y + f->generic.parent->y - 4, 18 );
-	Draw_Char( f->generic.x + f->generic.parent->x + 16, f->generic.y + f->generic.parent->y + 4, 24 );
+	Draw_ScaledChar( f->generic.x + f->generic.parent->x + 16, f->generic.y + f->generic.parent->y - 4, 18, charscale );
+	Draw_ScaledChar( f->generic.x + f->generic.parent->x + 16, f->generic.y + f->generic.parent->y + 4, 24, charscale );
 
-	Draw_Char( f->generic.x + f->generic.parent->x + 24 + f->visible_length * 8, f->generic.y + f->generic.parent->y - 4, 20 );
-	Draw_Char( f->generic.x + f->generic.parent->x + 24 + f->visible_length * 8, f->generic.y + f->generic.parent->y + 4, 26 );
+	Draw_ScaledChar( f->generic.x + f->generic.parent->x + 24 + f->visible_length * charscale, f->generic.y + f->generic.parent->y - 4, 20, charscale );
+	Draw_ScaledChar( f->generic.x + f->generic.parent->x + 24 + f->visible_length * charscale, f->generic.y + f->generic.parent->y + 4, 26, charscale );
 
 	for ( i = 0; i < f->visible_length; i++ )
 	{
-		Draw_Char( f->generic.x + f->generic.parent->x + 24 + i * 8, f->generic.y + f->generic.parent->y - 4, 19 );
-		Draw_Char( f->generic.x + f->generic.parent->x + 24 + i * 8, f->generic.y + f->generic.parent->y + 4, 25 );
+		Draw_ScaledChar( f->generic.x + f->generic.parent->x + 24 + i * charscale, f->generic.y + f->generic.parent->y - 4, 19, charscale );
+		Draw_ScaledChar( f->generic.x + f->generic.parent->x + 24 + i * charscale, f->generic.y + f->generic.parent->y + 4, 25, charscale);
 	}
 
-	Menu_DrawColorString( f->generic.x + f->generic.parent->x + 24, f->generic.y + f->generic.parent->y, tempbuffer );
+	Menu_DrawColorString( f->generic.x + f->generic.parent->x + 3*charscale, f->generic.y + f->generic.parent->y, tempbuffer );
 
 	if ( Menu_ItemAtCursor( f->generic.parent ) == f )
 	{
@@ -117,15 +122,15 @@ void Field_Draw( menufield_s *f )
 
 		if ( ( ( int ) ( Sys_Milliseconds() / 250 ) ) & 1 )
 		{
-			Draw_Char( f->generic.x + f->generic.parent->x + ( offset + 2 ) * 8 + 8,
+			Draw_ScaledChar( f->generic.x + f->generic.parent->x + ( offset + 2 ) * charscale + charscale,
 					   f->generic.y + f->generic.parent->y,
-					   11 );
+					   11, charscale );
 		}
 		else
 		{
-			Draw_Char( f->generic.x + f->generic.parent->x + ( offset + 2 ) * 8 + 8,
+			Draw_ScaledChar( f->generic.x + f->generic.parent->x + ( offset + 2 ) * charscale + charscale,
 					   f->generic.y + f->generic.parent->y,
-					   ' ' );
+					   ' ', charscale );
 		}
 	}
 }
@@ -502,15 +507,30 @@ void Menu_Draw( menuframework_s *menu )
 	{
 		menu->cursordraw( menu );
 	}
-	else if ( item && item->type != MTYPE_FIELD )
+	else if ( item && item->type == MTYPE_ACTION ) //change to a "highlite"
 	{
 		if ( item->flags & QMF_LEFT_JUSTIFY )
 		{
-			Draw_Char( menu->x + item->x - 24 + item->cursor_offset, menu->y + item->y, 12 + ( ( int ) ( Sys_Milliseconds()/250 ) & 1 ) );
+			if(item->name)
+				Menu_DrawString(menu->x + item->x - 24, menu->y + item->y, item->name);
 		}
 		else
 		{
-			Draw_Char( menu->x + item->cursor_offset, menu->y + item->y, 12 + ( ( int ) ( Sys_Milliseconds()/250 ) & 1 ) );
+			if(item->name)
+				Menu_DrawStringR2LDark(menu->x + item->x - 24, menu->y + item->y, item->name);
+		}
+	}
+	else if ( item && item->type != MTYPE_FIELD ) //change to a "highlite"
+	{
+		if ( item->flags & QMF_LEFT_JUSTIFY )
+		{
+			if(item->name)
+				Menu_DrawStringDark(menu->x + item->x - 24, menu->y + item->y, item->name);
+		}
+		else
+		{
+			if(item->name)
+				Menu_DrawStringR2L(menu->x + item->x - 24, menu->y + item->y, item->name);
 		}
 	}
 
@@ -532,29 +552,40 @@ void Menu_Draw( menuframework_s *menu )
 
 void Menu_DrawStatusBar( const char *string )
 {
+	int	charscale;
+
+	charscale = (float)(viddef.height)*8/600;
+	if(charscale < 8)
+		charscale = 8;
+
 	if ( string )
 	{
 		int l = strlen( string );
-		int maxrow = VID_HEIGHT / 8;
-		int maxcol = VID_WIDTH / 8;
+		int maxrow = VID_HEIGHT / charscale;
+		int maxcol = VID_WIDTH / charscale;
 		int col = maxcol / 2 - l / 2;
 
-		Draw_Fill( 0, VID_HEIGHT-8, VID_WIDTH, 8, 4 );
-		Menu_DrawString( col*8, VID_HEIGHT - 8, string );
+		Draw_Fill( 0, VID_HEIGHT-charscale, VID_WIDTH, charscale, 4 );
+		Menu_DrawString( col*charscale, VID_HEIGHT - charscale, string );
 	}
 	else
 	{
-		Draw_Fill( 0, VID_HEIGHT-8, VID_WIDTH, 8, 0 );
+		Draw_Fill( 0, VID_HEIGHT-charscale, VID_WIDTH, charscale, 0 );
 	}
 }
 
 void Menu_DrawString( int x, int y, const char *string )
 {
 	unsigned i;
+	int	charscale;
+
+	charscale = (float)(viddef.height)*8/600; 
+	if(charscale < 8)
+		charscale = 8;
 
 	for ( i = 0; i < strlen( string ); i++ )
 	{
-		Draw_Char( ( x + i*8 ), y, string[i] );
+		Draw_ScaledChar( ( x + i*charscale ), y, string[i], charscale );
 	}
 }
 vec4_t	Color_Table[8] =
@@ -572,6 +603,11 @@ void Menu_DrawColorString ( int x, int y, const char *str )
 {
 	int		num;
 	vec4_t	scolor;
+	int	charscale;
+
+	charscale = (float)(viddef.height)*8/600;
+	if(charscale < 8)
+		charscale = 8;
 
 	scolor[0] = 0; 
 	scolor[1] = 1;
@@ -586,7 +622,7 @@ void Menu_DrawColorString ( int x, int y, const char *str )
 			continue;
 		}
 		
-		Draw_ColorChar (x, y, *str, scolor); //this is only ever used for names.
+		Draw_ScaledColorChar (x, y, *str, scolor, charscale); //this is only ever used for names.
 		
 		num = *str++;
 		num &= 255;
@@ -598,36 +634,51 @@ void Menu_DrawColorString ( int x, int y, const char *str )
 			scolor[3] = 1;
 		}
 
-		x += 8;
+		x += charscale;
 	}
 }
 void Menu_DrawStringDark( int x, int y, const char *string )
 {
 	unsigned i;
+	int	charscale;
+
+	charscale = (float)(viddef.height)*8/600; 
+	if(charscale < 8)
+		charscale = 8;
 
 	for ( i = 0; i < strlen( string ); i++ )
 	{
-		Draw_Char( ( x + i*8 ), y, string[i] + 128 );
+		Draw_ScaledChar( ( x + i*charscale ), y, string[i] + 128, charscale );
 	}
 }
 
 void Menu_DrawStringR2L( int x, int y, const char *string )
 {
 	unsigned i;
+	int	charscale;
+
+	charscale = (float)(viddef.height)*8/600; 
+	if(charscale < 8)
+		charscale = 8;
 
 	for ( i = 0; i < strlen( string ); i++ )
 	{
-		Draw_Char( ( x - i*8 ), y, string[strlen(string)-i-1] );
+		Draw_ScaledChar( ( x - i*charscale ), y, string[strlen(string)-i-1], charscale );
 	}
 }
 
 void Menu_DrawStringR2LDark( int x, int y, const char *string )
 {
 	unsigned i;
+	int	charscale;
+
+	charscale = (float)(viddef.height)*8/600; 
+	if(charscale < 8)
+		charscale = 8;
 
 	for ( i = 0; i < strlen( string ); i++ )
 	{
-		Draw_Char( ( x - i*8 ), y, string[strlen(string)-i-1]+128 );
+		Draw_ScaledChar( ( x - i*charscale ), y, string[strlen(string)-i-1]+128, charscale );
 	}
 }
 
@@ -768,7 +819,7 @@ void Separator_Draw( menuseparator_s *s )
 void Separator2_Draw( menuseparator_s *s )
 {
 	if ( s->generic.name )
-		Menu_DrawString( s->generic.x + s->generic.parent->x, s->generic.y + s->generic.parent->y, s->generic.name );
+		Menu_DrawStringR2L( s->generic.x + s->generic.parent->x, s->generic.y + s->generic.parent->y, s->generic.name );
 }	
 void Slider_DoSlide( menuslider_s *s, int dir )
 {

@@ -185,8 +185,9 @@ void ACESP_LoadBots(edict_t *ent, int playerleft)
 					}
 				}
 		}
-		else
+		else {
 			ent->client->resp.botnum++;
+		}
         
 		//look for existing bots of same name, so that server doesn't fill up with bots
 		//when clients enter the game
@@ -198,8 +199,7 @@ void ACESP_LoadBots(edict_t *ent, int playerleft)
 			if (((int)(dmflags->value) & DF_SKINTEAMS) || ctf->value || tca->value || cp->value) 
 				ACESP_SpawnBot(NULL, info, skin, NULL); //we may be changing the info further on
 			else 
-				ACESP_SpawnBot (NULL, NULL, NULL, userinfo);
-			
+				ACESP_SpawnBot (NULL, NULL, NULL, userinfo);			
 		}
 		else if(found && ((total_players > sv_botkickthreshold->integer) && sv_botkickthreshold->integer)) 
 			ACESP_KickBot(info);
@@ -368,6 +368,8 @@ void ACESP_PutClientInServer (edict_t *bot, qboolean respawn, int team)
 	// clear entity values
 	bot->groundentity = NULL;
 	bot->client = &game.clients[index];
+	if(g_spawnprotect->value)
+		bot->client->spawnprotected = true;
 	bot->takedamage = DAMAGE_AIM;
 	bot->movetype = MOVETYPE_WALK;
 	bot->viewheight = 24;
@@ -597,6 +599,7 @@ void ACESP_PutClientInServer (edict_t *bot, qboolean respawn, int team)
 		gi.WriteByte (MZ_LOGIN);
 		gi.multicast (bot->s.origin, MULTICAST_PVS);
 	}
+	client->spawnprotecttime = level.time;
 	
 }
 
@@ -778,6 +781,8 @@ void ACESP_SpawnBot (char *team, char *name, char *skin, char *userinfo)
 		return;
 	}
 
+	game.num_bots++;
+
 	bot->yaw_speed = 100; // yaw speed
 	bot->inuse = true;
 	bot->is_bot = true;
@@ -843,6 +848,7 @@ void ACESP_RemoveBot(char *name)
 				bot->deadflag = DEAD_DEAD;
 				bot->inuse = false;
 				freed = true;
+				game.num_bots--;
 				safe_bprintf (PRINT_MEDIUM, "%s removed\n", bot->client->pers.netname);
 			}
 
@@ -925,6 +931,7 @@ void ACESP_KickBot(char *name)
 			if(freed) {
 				bot->client->resp.botnum--; //we have one less bot
 				bot->client->ps.botnum = bot->client->resp.botnum;
+				game.num_bots--;
 			}
 
 		}
