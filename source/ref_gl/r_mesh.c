@@ -676,37 +676,6 @@ void Mod_LoadMD2Model (model_t *mod, void *buffer)
 		}
 	}
 
-	/*if (gl_state.vbo)
-	{
-		int		index_st;
-		int		index_xyz;
-		float	*map;
-
-		mod->vbo_st = NULL;
-		mod->vbo_xyz = NULL;
-
-		tris = (dtriangle_t *) ((byte *)pheader + pheader->ofs_tris);
-		map = (float*) vbo_shadow;	
-
-		for (l=0, i=0; i<pheader->num_tris; i++)
-		{
-			for (j=0; j<3; j++)
-			{
-				index_st = tris[i].index_st[j];
-				map[l++] = mod->st[index_st].s;
-				map[l++] = mod->st[index_st].t;
-
-				index_xyz = tris[i].index_xyz[j];
-			}
-		}
-
-		if (l>3*MAX_VBO_XYZs)
-			Com_Error(ERR_FATAL, "Temporary buffer overflow\n");
-
-		mod->vbo_st = R_VCLoadData(VBO_STATIC, l*sizeof(float), &vbo_shadow, VBO_STORE_ANY, NULL);
-		GL_BindVBO(NULL);
-	}*/
-
 	mod->num_triangles = pheader->num_tris;
 
 	paliashdr = (dmdl_t *)mod->extradata;
@@ -1044,9 +1013,6 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 	byte *tangents, *oldtangents = NULL;
 	qboolean mirror = false;
 
-	if(paliashdr->num_tris*3 < 1)
-		return;
-
 	offs = paliashdr->num_xyz;
 
 	if(lerped)
@@ -1291,15 +1257,9 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
             }
         }
 
-		if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL ) ) ) {
-
-				if(qglLockArraysEXT)
-					qglLockArraysEXT(0, va);
-
-				qglDrawArrays(GL_TRIANGLES,0,va);
-
-				if(qglUnlockArraysEXT)
-					qglUnlockArraysEXT();
+		if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL ) ) ) 
+		{
+			R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 		}
 
 		if(gl_glsl_shaders->value && gl_state.glsl_shaders && gl_normalmaps->value) {
@@ -1361,15 +1321,8 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 		}
 		if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL ) ) )
 		{
-				if(qglLockArraysEXT)
-					qglLockArraysEXT(0, va);
-
-				qglDrawArrays(GL_TRIANGLES,0,va);
-
-				if(qglUnlockArraysEXT)
-					qglUnlockArraysEXT();
+			R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 		}
-
 	}
 	else if(rs)
 	{
@@ -1476,7 +1429,11 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 			{
 				vec3_t lightVec, lightVal;
 
-				if(!(gl_state.vbo && !lerped))
+				if(gl_state.vbo && !lerped)
+				{
+					KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER | KILL_TMU2_POINTER | KILL_NORMAL_POINTER);
+				}
+				else 
 				{
 					R_InitVArrays (VERT_NORMAL_COLOURED_TEXTURED);
 					qglNormalPointer(GL_FLOAT, 0, NormalsArray);
@@ -1759,40 +1716,33 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 				currentmodel->vbo_st = R_VCLoadData(VBO_STATIC, va*sizeof(vec2_t), TexCoordArray, VBO_STORE_ST, currententity);
 				currentmodel->vbo_normals = R_VCLoadData(VBO_STATIC, va*sizeof(vec3_t), NormalsArray, VBO_STORE_NORMAL, currententity);
 				currentmodel->vbo_tangents = R_VCLoadData(VBO_STATIC, va*sizeof(vec4_t), TangentsArray, VBO_STORE_TANGENT, currententity);
-
 				//Com_Printf("Loading mesh vbo.\n");
             }
 skipLoad:
 			if(gl_state.vbo && !lerped && stage->normalmap) 
 			{
-                qglEnableClientState( GL_VERTEX_ARRAY );
-                GL_BindVBO(currentmodel->vbo_xyz);
-                qglVertexPointer(3, GL_FLOAT, 0, 0);
+				qglEnableClientState( GL_VERTEX_ARRAY );
+				GL_BindVBO(currentmodel->vbo_xyz);
+				qglVertexPointer(3, GL_FLOAT, 0, 0);
 
-                qglEnableClientState(GL_TEXTURE_COORD_ARRAY);
-                GL_BindVBO(currentmodel->vbo_st);
-                qglTexCoordPointer(2, GL_FLOAT, 0, 0);
+				qglEnableClientState(GL_TEXTURE_COORD_ARRAY);
+				GL_BindVBO(currentmodel->vbo_st);
+				qglTexCoordPointer(2, GL_FLOAT, 0, 0);
 
-                qglEnableClientState( GL_NORMAL_ARRAY );
-                GL_BindVBO(currentmodel->vbo_normals);
-                qglNormalPointer(GL_FLOAT, 0, 0);
+				qglEnableClientState( GL_NORMAL_ARRAY );
+				GL_BindVBO(currentmodel->vbo_normals);
+				qglNormalPointer(GL_FLOAT, 0, 0);
 
 				glEnableVertexAttribArrayARB (1);
 				GL_BindVBO(currentmodel->vbo_tangents);
 				glVertexAttribPointerARB(1, 4, GL_FLOAT, GL_FALSE, sizeof(vec4_t), 0);
 
 				if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL )))
-					qglDrawArrays(GL_TRIANGLES, 0, paliashdr->num_tris*3);
-            }
+					R_DrawVarrays(GL_TRIANGLES, 0, paliashdr->num_tris*3, true);
+	        }
          	else if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL )))
 			{
-				if(qglLockArraysEXT)
-					qglLockArraysEXT(0, paliashdr->num_tris*3);
-
-				qglDrawArrays(GL_TRIANGLES, 0, paliashdr->num_tris*3);
-
-				if(qglUnlockArraysEXT)
-					qglUnlockArraysEXT();
+				R_DrawVarrays(GL_TRIANGLES, 0, paliashdr->num_tris*3, false);
 			}
 
 			qglColor4f(1,1,1,1);
@@ -1803,8 +1753,6 @@ skipLoad:
 			if(stage->normalmap)
 			{
 				glUseProgramObjectARB( 0 );
-				if(gl_state.vbo && !lerped)
-					glDisableVertexAttribArrayARB (1);
 				GL_EnableMultitexture( false );
 			}
 
@@ -1822,11 +1770,9 @@ done:
 	qglDisableClientState( GL_NORMAL_ARRAY);
 	qglDisableClientState( GL_COLOR_ARRAY );
 	qglEnableClientState( GL_TEXTURE_COORD_ARRAY );
+	glDisableVertexAttribArrayARB (1);
 
-	R_KillVArrays ();
-
-	if (gl_state.vbo)
-		GL_BindVBO(NULL);
+	R_KillVArrays ();	
 
 	if ( currententity->flags & ( RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE | RF_SHELL_DOUBLE | RF_SHELL_HALF_DAM ) )
 		qglEnable( GL_TEXTURE_2D );
@@ -1922,7 +1868,7 @@ void MD2_DrawShadow(dmdl_t *paliashdr, qboolean lerped)
 
 	}
 
-	qglDrawArrays(GL_TRIANGLES,0,va);
+	R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 
 	qglDisableClientState( GL_COLOR_ARRAY );
 	qglEnableClientState( GL_TEXTURE_COORD_ARRAY );
@@ -2307,9 +2253,6 @@ void MD2_DrawCasterFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped)
 	int		va = 0;
 	fstvert_t *st;
 
-	if(paliashdr->num_tris*3 < 1)
-		return;
-
 	if(lerped)
 		frame = (daliasframe_t *)((byte *)paliashdr + paliashdr->ofs_frames
 			+ currententity->frame * paliashdr->framesize);
@@ -2410,26 +2353,17 @@ skipLoad:
 	if(gl_state.vbo && !lerped) 
 	{
 		qglEnableClientState( GL_VERTEX_ARRAY );
-        GL_BindVBO(currentmodel->vbo_xyz);
-        qglVertexPointer(3, GL_FLOAT, 0, 0);   
+		GL_BindVBO(currentmodel->vbo_xyz);
+		qglVertexPointer(3, GL_FLOAT, 0, 0);   
 
-		qglDrawArrays(GL_TRIANGLES, 0, paliashdr->num_tris*3);
+		R_DrawVarrays(GL_TRIANGLES, 0, paliashdr->num_tris*3, true);
     }
 	else
 	{    
-		if(qglLockArraysEXT)
-			qglLockArraysEXT(0, paliashdr->num_tris*3);
-
-		qglDrawArrays(GL_TRIANGLES, 0, paliashdr->num_tris*3);
-
-		if(qglUnlockArraysEXT)
-			qglUnlockArraysEXT();
+		R_DrawVarrays(GL_TRIANGLES, 0, paliashdr->num_tris*3, false);
 	}
 
 	R_KillVArrays ();
-
-	if (gl_state.vbo)
-		GL_BindVBO(NULL);
 }
 
 //to do - alpha and alphamasks possible?

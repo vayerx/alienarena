@@ -549,9 +549,6 @@ static void BSP_RenderLightmappedPoly( msurface_t *surf )
 	unsigned lmtex = surf->lightmaptexturenum;
 	glpoly_t *p = surf->polys;
 
-	if(p->numverts < 1)
-		return;
-		
 	c_brush_polys++;
 
 	if (SurfaceIsAlphaBlended(surf))
@@ -597,7 +594,7 @@ static void BSP_RenderLightmappedPoly( msurface_t *surf )
 
 		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER);
 				
-		qglDrawArrays (GL_POLYGON, 0, p->numverts);
+		R_DrawVarrays (GL_POLYGON, 0, p->numverts, true);
 
 		qglBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	}
@@ -616,9 +613,6 @@ static void BSP_RenderGLSLLightmappedPoly( msurface_t *surf )
 	float	scroll;
 	unsigned lmtex = surf->lightmaptexturenum;
 	glpoly_t *p = surf->polys;
-
-	if(p->numverts < 1)
-		return;
 		
 	c_brush_polys++;
 
@@ -673,7 +667,7 @@ static void BSP_RenderGLSLLightmappedPoly( msurface_t *surf )
 
 		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER);
 				
-		qglDrawArrays (GL_POLYGON, 0, p->numverts);
+		R_DrawVarrays (GL_POLYGON, 0, p->numverts, true);
 
 		qglBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	}
@@ -692,9 +686,6 @@ static void BSP_RenderGLSLDynamicLightmappedPoly( msurface_t *surf )
 	float	scroll;
 	unsigned lmtex = surf->lightmaptexturenum;
 	glpoly_t *p = surf->polys;
-
-	if(p->numverts < 1)
-		return;
 		
 	c_brush_polys++;
 
@@ -759,7 +750,7 @@ static void BSP_RenderGLSLDynamicLightmappedPoly( msurface_t *surf )
 
 		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER);
 				
-		qglDrawArrays (GL_POLYGON, 0, p->numverts);
+		R_DrawVarrays (GL_POLYGON, 0, p->numverts, true);
 
 		qglBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	}

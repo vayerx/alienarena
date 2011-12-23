@@ -1323,13 +1323,7 @@ void IQM_DrawFrame(int skinnum)
 
 		if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL ) ) )
 		{
-			if(qglLockArraysEXT)
-				qglLockArraysEXT(0, va);
-
-			qglDrawArrays(GL_TRIANGLES,0,va);
-
-			if(qglUnlockArraysEXT)
-				qglUnlockArraysEXT();
+			R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 		}
 
 		if(gl_glsl_shaders->value && gl_state.glsl_shaders && gl_normalmaps->value)
@@ -1439,13 +1433,10 @@ void IQM_DrawFrame(int skinnum)
 
 		if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL ) ) )
 		{
-			if(qglLockArraysEXT)
-				qglLockArraysEXT(0, va);
-
-			qglDrawArrays(GL_TRIANGLES,0,va);
-
-			if(qglUnlockArraysEXT)
-				qglUnlockArraysEXT();
+			if(va > 0)
+			{
+				R_DrawVarrays(GL_TRIANGLES, 0, va, false);
+			}
 		}
 
 		if(mirror && !(currententity->flags & RF_WEAPONMODEL))
@@ -1676,13 +1667,7 @@ void IQM_DrawFrame(int skinnum)
 
 			if (!(!cl_gun->value && ( currententity->flags & RF_WEAPONMODEL ) ) )
 			{
-				if(qglLockArraysEXT)
-					qglLockArraysEXT(0, va);
-
-				qglDrawArrays(GL_TRIANGLES,0,va);
-
-				if(qglUnlockArraysEXT)
-					qglUnlockArraysEXT();
+				R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 			}
 
 			qglColor4f(1,1,1,1);
@@ -1863,13 +1848,7 @@ void IQM_DrawRagDollFrame(int RagDollID, int skinnum, float shellAlpha, int shel
             }
         }
 
-		if(qglLockArraysEXT)
-			qglLockArraysEXT(0, va);
-
-		qglDrawArrays(GL_TRIANGLES,0,va);
-
-		if(qglUnlockArraysEXT)
-			qglUnlockArraysEXT();
+		R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 
 		if(gl_glsl_shaders->value && gl_state.glsl_shaders && gl_normalmaps->value)
 		{
@@ -1946,13 +1925,7 @@ void IQM_DrawRagDollFrame(int RagDollID, int skinnum, float shellAlpha, int shel
 			}
 		}
 
-		if(qglLockArraysEXT)
-			qglLockArraysEXT(0, va);
-
-		qglDrawArrays(GL_TRIANGLES,0,va);
-
-		if(qglUnlockArraysEXT)
-			qglUnlockArraysEXT();
+		R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 
 		if(mirror)
 			GL_EnableMultitexture( false );
@@ -2162,13 +2135,7 @@ void IQM_DrawRagDollFrame(int RagDollID, int skinnum, float shellAlpha, int shel
 				}
 			}
 
-			if(qglLockArraysEXT)
-				qglLockArraysEXT(0, va);
-
-			qglDrawArrays(GL_TRIANGLES,0,va);
-
-			if(qglUnlockArraysEXT)
-				qglUnlockArraysEXT();
+			R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 
 			qglColor4f(1,1,1,1);
 
@@ -2256,7 +2223,7 @@ void IQM_DrawShadow(vec3_t origin)
 		}
 	}
 
-	qglDrawArrays(GL_TRIANGLES,0,va);
+	R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 
 	qglDisableClientState( GL_COLOR_ARRAY );
 	qglEnableClientState( GL_TEXTURE_COORD_ARRAY );
@@ -2710,15 +2677,9 @@ void IQM_DrawCasterFrame ()
         }
     }
 
-    if(qglLockArraysEXT)
-        qglLockArraysEXT(0, va);
+	R_DrawVarrays(GL_TRIANGLES, 0, va, false);
 
-    qglDrawArrays(GL_TRIANGLES,0,va);
-
-    if(qglUnlockArraysEXT)
-        qglUnlockArraysEXT();
-
-    R_KillVArrays ();
+	R_KillVArrays ();
 }
 
 void IQM_DrawCaster ( void )
