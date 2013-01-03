@@ -1,0 +1,3 @@
+[submodule "data1"]
+	path = data1
+	url = git://github.com/vayerx/alienarena-data.git

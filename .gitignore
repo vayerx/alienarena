@@ -1,0 +1,15 @@
+*.a
+*.core
+*.kate-swp
+*.o
+*~
+.deps/
+.dirstamp
+Makefile
+config.log
+config.status
+config/config.h
+config/stamp-h1
+source/Makefile
+source/alienarena
+source/alienarena-ded
