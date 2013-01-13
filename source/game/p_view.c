@@ -85,7 +85,7 @@ void P_DamageFeedback (edict_t *player)
 	client = player->client;
 
 	// flash the backgrounds behind the status numbers
-	client->ps.stats[STAT_FLASHES] = 0;
+	client->ps.stats[STAT_FLASHES] &= ~(1|2);
 	if (client->damage_blood)
 		client->ps.stats[STAT_FLASHES] |= 1;
 	if (client->damage_armor && !(player->flags & FL_GODMODE) && (client->invincible_framenum <= level.framenum))
@@ -837,6 +837,9 @@ TeamEffects
 */
 void TeamEffects(edict_t *player)
 {
+	if(g_tactical->integer)
+		return;
+
 	if(player->dmteam == RED_TEAM)
 		player->s.effects |= EF_TEAM1;
 	else if(player->dmteam == BLUE_TEAM)
@@ -863,7 +866,7 @@ void G_SetClientEffects (edict_t *ent)
 
 	if ((dmflags->integer & DF_SKINTEAMS) || ctf->value || tca->value || cp->value )
 		TeamEffects(ent);
-	else if (g_dmlights->integer)
+	else if (g_dmlights->integer && !g_tactical->integer)
 	    ent->s.effects |= EF_TEAM2;
 
 	if (ent->client->quad_framenum > level.framenum)

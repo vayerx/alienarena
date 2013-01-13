@@ -891,19 +891,19 @@ void fire_punch(edict_t *self, vec3_t start, vec3_t aimdir, int damage);
 #else
 void fire_bullet (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick, int hspread, int vspread, int mod);
 void fire_shotgun (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick, int hspread, int vspread, int count, int mod);
-void fire_blaster (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int speed, int effect, qboolean hyper);
+void fire_blaster (edict_t *self, vec3_t start, vec3_t muzzle, vec3_t aimdir, int damage, int speed, int effect, qboolean hyper);
 void fire_rocket (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage);
 void fire_homingrocket (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage);
-void fire_plasma (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick);
+void fire_disruptor (edict_t *self, vec3_t start, vec3_t muzzle, vec3_t aimdir, int damage, int kick);
 void fire_bomb (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
 void fire_blaster_beam (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick, qboolean detonate, qboolean alien);
-void fire_floater (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
-void fire_floater_alien (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
+void fire_smartgrenade (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
+void fire_smartgrenade_alien (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
 void fire_flamethrower(edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius);
 void fire_hover_beam (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick, qboolean detonate);
 void fire_minderaser (edict_t *self, vec3_t start, vec3_t dir, float timer);
 void fire_spider (edict_t *self, vec3_t start, vec3_t aimdir, int speed);
-void fire_energy_field (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick);
+void fire_vaporizer (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick);
 void fire_blasterball (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, int effect, qboolean hyper, qboolean alien);
 void fire_prox (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
 void fire_fireball (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int speed, float damage_radius, int radius_damage);
@@ -1647,6 +1647,13 @@ struct edict_s
 
 	//class(human = 0; alien = 1; robot = 2;)
 	int ctype;
+
+	//tactical mode
+	qboolean has_bomb;
+	qboolean has_detonator;
+	qboolean has_vaporizor;
+	qboolean has_minderaser;
+	int armor_type;
 
 	//model specific gibs
 	int usegibs;

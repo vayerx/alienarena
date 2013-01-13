@@ -783,6 +783,7 @@ typedef struct
 #define	STAT_LAYOUTS			13
 #define	STAT_FRAGS				14
 #define	STAT_FLASHES			15		// cleared each frame, 1 = health, 2 = armor
+#define STAT_FLAGS				15		// misc boolean values, use only bits 3-16
 #define STAT_CHASE				16
 #define STAT_SPECTATOR			17
 #define STAT_SCOREBOARD			18
@@ -801,6 +802,13 @@ typedef struct
 #define STAT_WEAPN7				31
 
 #define	MAX_STATS				32
+
+// bit flags for use in STAT_FLAGS
+#define STAT_FLAGS_CROSSHAIRPOSITION	(4|8)
+#define STAT_FLAGS_CROSSHAIRPOS1		0 //default
+#define STAT_FLAGS_CROSSHAIRCENTER		4
+#define STAT_FLAGS_CROSSHAIRPOS2		8
+#define STAT_FLAGS_CROSSHAIRPOS3		12
 
 
 // dmflags->value flags

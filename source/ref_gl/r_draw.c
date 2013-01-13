@@ -407,7 +407,7 @@ void Draw_AlphaStretchImage (int x, int y, int w, int h, image_t *gl, float alph
 		VA_SetElem2(tex_array[1], sh, tl);
 		VA_SetElem2(tex_array[2], sh, th);
 		VA_SetElem2(tex_array[3], sl, th);
-		R_DrawVarrays (GL_QUADS, 0, 4, false);
+		R_DrawVarrays (GL_QUADS, 0, 4);
 		qglEnable (GL_ALPHA_TEST);
 		qglDisable (GL_BLEND);
 		R_KillVArrays();
@@ -494,7 +494,7 @@ void Draw_AlphaStretchImage (int x, int y, int w, int h, image_t *gl, float alph
 			RS_SetTexcoords2D (stage, &s, &t);
 			VA_SetElem2(tex_array[2],s, t);
 
-			R_DrawVarrays(GL_QUADS, 0, 4, false);
+			R_DrawVarrays(GL_QUADS, 0, 4);
 
 			qglColor4f(1,1,1,1);
 			if (stage->colormap.enabled)
@@ -586,8 +586,9 @@ void Draw_AlphaStretchPlayerIcon (int x, int y, int w, int h, char *pic, float a
 	{
 		return;
 	}
-	
-	return Draw_AlphaStretchImage (x, y, w, h, gl, alphaval);
+
+	Draw_AlphaStretchImage (x, y, w, h, gl, alphaval);
+	return; 
 }
 
 

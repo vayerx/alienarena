@@ -159,6 +159,7 @@ extern	cvar_t	*vid_gamma;
 extern  cvar_t	*vid_contrast;
 
 extern cvar_t *r_anisotropic;
+extern cvar_t *r_alphamasked_anisotropic;
 extern cvar_t *r_ext_max_anisotropy;
 
 extern cvar_t	*r_overbrightbits;
@@ -178,7 +179,7 @@ extern  cvar_t	*r_godrays;
 extern  cvar_t	*r_godray_intensity;
 extern	cvar_t	*r_optimize;
 
-extern	cvar_t	*r_hdlightmaps;
+extern	cvar_t	*r_lightmapfiles;
 
 extern  cvar_t	*r_ragdolls;
 extern  cvar_t  *r_ragdoll_debug;
@@ -230,18 +231,23 @@ extern	float	r_farclip, r_farclip_min, r_farclip_bias;
 extern	int		r_origin_leafnum;
 
 //Image
-extern void R_InitImageSubsystem(void);
-extern void GL_Bind (int texnum);
-extern void GL_MBind( GLenum target, int texnum );
-extern void GL_TexEnv( GLenum value );
-extern void GL_EnableMultitexture( qboolean enable );
-extern void GL_SelectTexture( GLenum );
+void R_InitImageSubsystem(void);
+void GL_Bind (int texnum);
+void GL_MBind( GLenum target, int texnum );
+void GL_TexEnv( GLenum value );
+void GL_EnableMultitexture( qboolean enable );
+void GL_SelectTexture( GLenum );
+void RefreshFont (void);
+
 extern void vectoangles (vec3_t value1, vec3_t angles);
-extern void R_LightPoint (vec3_t p, vec3_t color, qboolean addDynamic);
-extern void R_PushDlights (void);
-extern void R_PushDlightsForBModel (entity_t *e);
-extern void SetVertexOverbrights (qboolean toggle);
-extern void RefreshFont (void);
+
+// dynamic lights
+void R_StaticLightPoint (vec3_t p, vec3_t color);
+void R_DynamicLightPoint (vec3_t p, vec3_t color);
+void R_LightPoint (vec3_t p, vec3_t color, qboolean addDynamic);
+void R_PushDlights (void);
+void R_PushDlightsForBModel (entity_t *e);
+void SetVertexOverbrights (qboolean toggle);
 
 //====================================================================
 extern	model_t	*r_worldmodel;
@@ -351,7 +357,7 @@ qboolean r_hasleaves;
 extern void Mod_AddVegetationSurface (msurface_t *surf, int texnum, vec3_t color, float size, char name[MAX_QPATH], int type);
 extern void R_DrawVegetationSurface (void);
 extern void R_ClearGrasses(void);
-extern void R_MarkGrassSunShadowCasters(model_t *mod); 
+extern void R_FinalizeGrass(model_t *mod); 
 
 //Simple Items
 extern void R_SI_InitTextures( void );
@@ -564,16 +570,16 @@ extern vec3_t ShadowArray[MAX_SHADOW_VERTS];
 #define KILL_NORMAL_POINTER 8
 
 // vertex array subsystem
-extern void R_InitVArrays (int varraytype);
-extern void R_KillVArrays (void);
-extern void R_DrawVarrays(GLenum mode, GLint first, GLsizei count, qboolean vbo);
-extern void R_InitQuadVarrays(void);
-extern void R_AddSurfToVArray (msurface_t *surf);
-extern void R_AddShadowSurfToVArray (msurface_t *surf, vec3_t origin);
-extern void R_AddTexturedSurfToVArray (msurface_t *surf, float scroll);
-extern void R_AddLightMappedSurfToVArray (msurface_t *surf, float scroll);
-extern void R_AddGLSLShadedWarpSurfToVArray (msurface_t *surf, float scroll);
-extern void R_KillNormalTMUs(void);
+void R_InitVArrays (int varraytype);
+void R_KillVArrays (void);
+void R_DrawVarrays(GLenum mode, GLint first, GLsizei count);
+void R_InitQuadVarrays(void);
+void R_AddSurfToVArray (msurface_t *surf);
+void R_AddShadowSurfToVArray (msurface_t *surf, vec3_t origin);
+void R_AddTexturedSurfToVArray (msurface_t *surf, float scroll);
+void R_AddLightMappedSurfToVArray (msurface_t *surf, float scroll);
+void R_AddGLSLShadedWarpSurfToVArray (msurface_t *surf, float scroll);
+void R_KillNormalTMUs(void);
 
 //shadows
 extern  void R_InitShadowSubsystem(void);

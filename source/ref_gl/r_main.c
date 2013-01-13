@@ -156,6 +156,7 @@ cvar_t  *vid_contrast;
 cvar_t	*vid_ref;
 
 cvar_t *r_anisotropic;
+cvar_t *r_alphamasked_anisotropic;
 cvar_t *r_ext_max_anisotropy;
 
 cvar_t	*r_shaders;
@@ -168,7 +169,7 @@ cvar_t	*r_godrays;
 cvar_t  *r_godray_intensity;
 cvar_t	*r_optimize;
 
-cvar_t	*r_hdlightmaps;
+cvar_t	*r_lightmapfiles;
 
 qboolean	map_fog;
 
@@ -1124,6 +1125,7 @@ void R_RenderView (refdef_t *fd)
 		}
 	}
 
+
 	R_BloomBlend( &r_newrefdef );//BLOOMS
 
 	R_RenderSun();
@@ -1284,9 +1286,8 @@ void R_Register( void )
 	r_optimize = Cvar_Get ("r_optimize", "1", CVAR_ARCHIVE|CVARDOC_BOOL);
 	Cvar_Describe (r_optimize, "Skip BSP recursion unless you move. Good for performance, recommend leaving it on.");
 	
-	//TODO: rename cvar_t C variable as well.
-	r_hdlightmaps = Cvar_Get("r_lightmapfiles", "1", CVAR_ARCHIVE|CVARDOC_BOOL);
-	Cvar_Describe (r_hdlightmaps, "Enables the loading of .lightmap files, with more detailed light and shadow. Turn this off if video RAM is limited.");
+	r_lightmapfiles = Cvar_Get("r_lightmapfiles", "1", CVAR_ARCHIVE|CVARDOC_BOOL);
+	Cvar_Describe (r_lightmapfiles, "Enables the loading of .lightmap files, with more detailed light and shadow. Turn this off if video RAM is limited.");
 
 	r_minimap_size = Cvar_Get ("r_minimap_size", "256", CVAR_ARCHIVE );
 	r_minimap_zoom = Cvar_Get ("r_minimap_zoom", "1", CVAR_ARCHIVE );
@@ -1374,26 +1375,8 @@ R_SetCompatibility
 
 void R_SetCompatibility(void)
 {
-	Cvar_SetValue("r_bloom", 0);
-	Cvar_SetValue("r_bloom_intensity", 0.5);
-	Cvar_SetValue("r_overbrightbits", 2);
-	Cvar_SetValue("gl_picmip", 0);
-	Cvar_SetValue("gl_normalmaps", 0);
-	Cvar_SetValue("gl_bspnormalmaps", 0); 
-	Cvar_SetValue("gl_shadowmaps", 0);
-	Cvar_SetValue("gl_glsl_postprocess", 0);
-	Cvar_SetValue("gl_glsl_shaders", 0);
-	Cvar_SetValue("gl_usevbo", 0);
-	Cvar_SetValue("r_shaders", 0);
-	Cvar_SetValue("gl_dynamic", 0);
-	Cvar_SetValue("gl_mirror", 0);
-	Cvar_SetValue("r_lensflare", 0);
-	Cvar_SetValue("r_lightbeam", 0);
-	Cvar_SetValue("r_drawsun", 0);
-	Cvar_SetValue("r_godrays", 0);
-	Cvar_SetValue("r_hdlightmaps", 0);
-
-
+	Cmd_ExecuteString ("exec graphical_presets/compatibility.cfg");
+	Cbuf_Execute ();
 	Com_Printf("...autodetected MAX COMPATIBILITY game setting\n");
 }
 
@@ -1405,25 +1388,8 @@ R_SetMaxPerformance
 
 void R_SetMaxPerformance( void )
 {
-	Cvar_SetValue("r_bloom", 0);
-	Cvar_SetValue("r_bloom_intensity", 0.5);
-	Cvar_SetValue("r_overbrightbits", 2);
-	Cvar_SetValue("gl_picmip", 0);
-	Cvar_SetValue("gl_normalmaps", 1);
-	Cvar_SetValue("gl_bspnormalmaps", 0); 
-	Cvar_SetValue("gl_shadowmaps", 0);
-	Cvar_SetValue("gl_glsl_postprocess", 0);
-	Cvar_SetValue("gl_glsl_shaders", 1);
-	Cvar_SetValue("gl_usevbo", 1);
-	Cvar_SetValue("r_shaders", 1);
-	Cvar_SetValue("gl_dynamic", 0);
-	Cvar_SetValue("gl_mirror", 1);
-	Cvar_SetValue("r_lensflare", 1);
-	Cvar_SetValue("r_lightbeam", 1);
-	Cvar_SetValue("r_drawsun", 0);
-	Cvar_SetValue("r_godrays", 0);
-	Cvar_SetValue("r_hdlightmaps", 1);
-
+	Cmd_ExecuteString ("exec graphical_presets/maxperformance.cfg");
+	Cbuf_Execute ();
 	Com_Printf("...autodetected MAX PERFORMANCE game setting\n");
 }
 
@@ -1435,25 +1401,8 @@ R_SetPerformance
 
 void R_SetPerformance( void )
 {
-	Cvar_SetValue("r_bloom", 1);
-	Cvar_SetValue("r_bloom_intensity", 0.5);
-	Cvar_SetValue("r_overbrightbits", 2);
-	Cvar_SetValue("gl_picmip", 0);
-	Cvar_SetValue("gl_normalmaps", 1);
-	Cvar_SetValue("gl_bspnormalmaps", 0); 
-	Cvar_SetValue("gl_shadowmaps", 0);
-	Cvar_SetValue("gl_glsl_postprocess", 1);
-	Cvar_SetValue("gl_glsl_shaders", 1);
-	Cvar_SetValue("gl_usevbo", 1);
-	Cvar_SetValue("r_shaders", 1);
-	Cvar_SetValue("gl_dynamic", 1);
-	Cvar_SetValue("gl_mirror", 1);
-	Cvar_SetValue("r_lensflare", 1);
-	Cvar_SetValue("r_lightbeam", 1);
-	Cvar_SetValue("r_drawsun", 2);
-	Cvar_SetValue("r_godrays", 0);
-	Cvar_SetValue("r_hdlightmaps", 1);
-
+	Cmd_ExecuteString ("exec graphical_presets/performance.cfg");
+	Cbuf_Execute ();
 	Com_Printf("...autodetected PERFORMANCE game setting\n");
 }
 
@@ -1465,25 +1414,8 @@ R_SetQuality
 
 void R_SetQuality( void )
 {
-	Cvar_SetValue("r_bloom", 1);
-	Cvar_SetValue("r_bloom_intensity", 0.5);
-	Cvar_SetValue("r_overbrightbits", 2);
-	Cvar_SetValue("gl_picmip", 0);
-	Cvar_SetValue("gl_normalmaps", 1);
-	Cvar_SetValue("gl_bspnormalmaps", 1); 
-	Cvar_SetValue("gl_shadowmaps", 0);
-	Cvar_SetValue("gl_glsl_postprocess", 1);
-	Cvar_SetValue("gl_glsl_shaders", 1);
-	Cvar_SetValue("gl_usevbo", 1);
-	Cvar_SetValue("r_shaders", 1);
-	Cvar_SetValue("gl_dynamic", 1);
-	Cvar_SetValue("gl_mirror", 1);
-	Cvar_SetValue("r_lensflare", 1);
-	Cvar_SetValue("r_lightbeam", 1);
-	Cvar_SetValue("r_drawsun", 2);
-	Cvar_SetValue("r_godrays", 0);
-	Cvar_SetValue("r_hdlightmaps", 1);
-
+	Cmd_ExecuteString ("exec graphical_presets/quality.cfg");
+	Cbuf_Execute ();
 	Com_Printf("...autodetected QUALITY game setting\n");
 }
 
@@ -1495,25 +1427,8 @@ R_SetMaxQuality
 
 void R_SetMaxQuality( void )
 {
-	Cvar_SetValue("r_bloom", 1);
-	Cvar_SetValue("r_bloom_intensity", 0.5);
-	Cvar_SetValue("r_overbrightbits", 2);
-	Cvar_SetValue("gl_picmip", 0);
-	Cvar_SetValue("gl_normalmaps", 1);
-	Cvar_SetValue("gl_bspnormalmaps", 1); 
-	Cvar_SetValue("gl_shadowmaps", 1);
-	Cvar_SetValue("gl_glsl_postprocess", 1);
-	Cvar_SetValue("gl_glsl_shaders", 1);
-	Cvar_SetValue("gl_usevbo", 1);
-	Cvar_SetValue("r_shaders", 1);
-	Cvar_SetValue("gl_dynamic", 1);
-	Cvar_SetValue("gl_mirror", 1);
-	Cvar_SetValue("r_lensflare", 1);
-	Cvar_SetValue("r_lightbeam", 1);
-	Cvar_SetValue("r_drawsun", 2);
-	Cvar_SetValue("r_godrays", 1);
-	Cvar_SetValue("r_hdlightmaps", 1);
-
+	Cmd_ExecuteString ("exec graphical_presets/maxquality.cfg");
+	Cbuf_Execute ();
 	Com_Printf("...autodetected MAX QUALITY game setting\n");
 }
 
