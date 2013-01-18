@@ -1102,7 +1102,7 @@ void Weapon_RocketLauncher (edict_t *ent)
 {
 	static int	pause_frames[]	= {52, 0};
 	static int	fire_frames[]	= {6, 0};
-	static int	excessive_fire_frames[]	= {5,7,9,11,13, 0};
+	static int	excessive_fire_frames[]	= {5,6,7,9,11,13, 0};
 
 	if(excessive->value || ent->client->invincible_framenum > level.framenum)
 		Weapon_Generic (ent, 5, 14, 52, 56, pause_frames, excessive_fire_frames, Weapon_RocketLauncher_Fire);
@@ -1834,7 +1834,7 @@ void weapon_minderaser_fire (edict_t *ent)
 	forward[1] = forward[1] * 12.0;
 	forward[2] = forward[2] * 12.0;
 	
-	if(ent->altfire) 
+	if(ent->altfire || excessive->value)
 		fire_spider (ent, start, forward, 25);
 	else
 		fire_minderaser (ent, start, forward, 30);

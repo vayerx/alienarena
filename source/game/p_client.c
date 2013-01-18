@@ -1060,7 +1060,7 @@ void InitClientPersistant (gclient_t *client)
 		client->pers.max_grenades	= g_maxgrenades->value * 10;
 		client->pers.max_cells		= g_maxcells->value * 2.5;
 		client->pers.max_slugs		= g_maxslugs->value * 10;
-		client->pers.max_seekers	= g_maxseekers->value * 2;
+		client->pers.max_seekers	= g_maxseekers->value * 3;
 
 		client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] = 1;
 		client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = g_maxrockets->value * 10;
@@ -1076,7 +1076,7 @@ void InitClientPersistant (gclient_t *client)
 		client->pers.inventory[ITEM_INDEX(FindItem("Flame Thrower"))] = 1;
 		client->pers.inventory[ITEM_INDEX(FindItem("napalm"))] = g_maxgrenades->value * 10;
 		client->pers.inventory[ITEM_INDEX(FindItem("Minderaser"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("seekers"))] = g_maxseekers->value * 2;
+		client->pers.inventory[ITEM_INDEX(FindItem("seekers"))] = g_maxseekers->value * 3;
 	} 
 	else 
 	{
