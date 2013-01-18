@@ -1045,6 +1045,7 @@ void Weapon_RocketLauncher_Fire (edict_t *ent)
 	int		damage;
 	float	damage_radius;
 	int		radius_damage;
+	int		base_speed;
 
 	// damage = 100 + (int)(random() * 20.0);
 	damage        = 110; // median of formerly random 100..120
@@ -1055,6 +1056,7 @@ void Weapon_RocketLauncher_Fire (edict_t *ent)
 		damage *= 2;
 		radius_damage *= 2;
 	}
+	base_speed = 1200;
 
 	AngleVectors (ent->client->v_angle, forward, right, NULL);
 
@@ -1066,19 +1068,19 @@ void Weapon_RocketLauncher_Fire (edict_t *ent)
 
 	if(ent->client->buttons & BUTTON_ATTACK2) //alt fire
 	{
-		if(ent->client->homing_shots < 5) {
+		if(ent->client->homing_shots < 10) {
 			if(excessive->value) //no homers in excessive!
-				fire_rocket (ent, start, forward, damage, 900, damage_radius, radius_damage);
+				fire_rocket (ent, start, forward, damage, base_speed, damage_radius, radius_damage);
 			else
-				fire_homingrocket (ent, start, forward, damage, 250, damage_radius, radius_damage);
+				fire_homingrocket (ent, start, forward, damage / 3 * 2, base_speed / 3, damage_radius, radius_damage / 3 * 2);
 		}
 		else {
 			safe_cprintf(ent, PRINT_HIGH, "Exceeded max number of homing missiles for this life!\n");
-			fire_rocket (ent, start, forward, damage, 900, damage_radius, radius_damage);
+			fire_rocket (ent, start, forward, damage, base_speed, damage_radius, radius_damage);
 		}
 	}
 	else
-		fire_rocket (ent, start, forward, damage, 900, damage_radius, radius_damage);
+		fire_rocket (ent, start, forward, damage, base_speed, damage_radius, radius_damage);
 
 	// send muzzle flash
 	gi.WriteByte (svc_muzzleflash);
