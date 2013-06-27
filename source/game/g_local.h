@@ -1127,7 +1127,7 @@ extern void SP_misc_electroflash (edict_t *ent);
 #define BASE_ROCKETS	10
 #define BASE_SHELLS		10
 #define BASE_CELLS		50
-#define BASE_SLUGS		10
+#define BASE_SLUGS		6
 #define BASE_GRENADES	50
 #define BASE_BULLETS	50
 #define BASE_SEEKERS	1
