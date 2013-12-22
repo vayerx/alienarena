@@ -114,17 +114,25 @@ typedef enum
 	WEAPON_FIRING
 } weaponstate_t;
 
+#define AMMO_TYPES \
+	X (BULLETS,		"bullets",				50, 200, 2.5) \
+	X (SHELLS,		"alien smart grenade",	10, 100, 5) \
+	X (ROCKETS,		"rockets",				10, 50, 10) \
+	X (GRENADES,	"napalm",				50, 50, 10) \
+	X (CELLS,		"cells",				50, 200, 2.5) \
+	X (SLUGS,		"slugs",				10, 50, 10) \
+	X (SEEKERS,		"seekers",				1, 1, 2) \
+	X (BOMBS,		"bombs",				1, 1, 2)
+
+#define X(name,itname,base,max,excessivemult) \
+	AMMO_##name,
+
 typedef enum
 {
-	AMMO_BULLETS,
-	AMMO_SHELLS,
-	AMMO_ROCKETS,
-	AMMO_GRENADES,
-	AMMO_CELLS,
-	AMMO_SLUGS,
-	AMMO_SEEKERS,
-	AMMO_BOMBS
+	AMMO_TYPES
 } ammo_t;
+
+#undef X
 
 //teams
 typedef struct teamcensus_s
@@ -500,19 +508,25 @@ typedef struct
 {
 	qboolean alienComputer;
 	int		 alienComputerHealth;
+	int		 aCTime;
 	qboolean alienPowerSource;
 	int		 alienPowerSourceHealth;
+	int aPTime;
 	qboolean alienAmmoDepot;
 	int		 alienAmmoDepotHealth;
-	qboolean alienBackupGen;
+	int		 aATime;
+	qboolean alienBackupGen;	
 
 	qboolean humanComputer;
 	int		 humanComputerHealth;
+	int		 hCTime;
 	qboolean humanPowerSource;
 	int		 humanPowerSourceHealth;
+	int hPTime;
 	qboolean humanAmmoDepot;
 	int		 humanAmmoDepotHealth;
-	qboolean humanBackupGen;
+	int hATime;
+	qboolean humanBackupGen;	
 
 } tactical_t;
 
@@ -660,14 +674,13 @@ extern	cvar_t	*wep_selfdmgmulti;
 //health/max health/max ammo
 extern	cvar_t	*g_spawnhealth;
 extern	cvar_t	*g_maxhealth;
-extern	cvar_t	*g_maxbullets;
-extern	cvar_t	*g_maxshells;
-extern	cvar_t	*g_maxrockets;
-extern	cvar_t	*g_maxgrenades;
-extern	cvar_t	*g_maxcells;
-extern	cvar_t	*g_maxslugs;
-extern	cvar_t	*g_maxseekers;
-extern  cvar_t	*g_maxbombs;
+
+#define X(name,itname,base,max,excessivemult) \
+	cvar_t *g_max##name;
+
+AMMO_TYPES
+
+#undef X
 
 //quick weapon change
 extern  cvar_t  *quickweap;
@@ -830,7 +843,6 @@ void	G_TouchSolids (edict_t *ent);
 char	*G_CopyString (const char *in);
 void	G_CleanPlayerName ( const char *source, char *dest );
 
-float	*tv (float x, float y, float z);
 char	*vtos (vec3_t v);
 
 float vectoyaw (vec3_t vec);
@@ -917,6 +929,7 @@ void fire_blaster (edict_t *self, vec3_t start, vec3_t muzzle, vec3_t aimdir, in
 void fire_rocket (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage);
 void fire_homingrocket (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage);
 void fire_disruptor (edict_t *self, vec3_t start, vec3_t muzzle, vec3_t aimdir, int damage, int kick);
+void fire_lightning_blast (edict_t *self);
 void fire_bomb (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
 void fire_blaster_beam (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick, qboolean detonate, qboolean alien);
 void fire_smartgrenade (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
@@ -1162,16 +1175,6 @@ extern void SP_misc_electroflash (edict_t *ent);
 #define	ANIM_DEATH		5
 #define	ANIM_REVERSE	6
 
-#define BASE_ROCKETS	10
-#define BASE_SHELLS		10
-#define BASE_CELLS		50
-#define BASE_SLUGS		6
-#define BASE_GRENADES	50
-#define BASE_BULLETS	50
-#define BASE_SEEKERS	1
-#define BASE_BOMBS		1
-
-
 // client data that stays across multiple level loads
 typedef struct
 {
@@ -1192,16 +1195,6 @@ typedef struct
 
 	int			selected_item;
 	int			inventory[MAX_ITEMS];
-
-	// ammo capacities
-	int			max_bullets;
-	int			max_shells;
-	int			max_rockets;
-	int			max_grenades;
-	int			max_cells;
-	int			max_slugs;
-	int			max_seekers;
-	int			max_bombs;
 
 	gitem_t		*weapon;
 	gitem_t		*lastweapon;
@@ -1311,14 +1304,7 @@ struct gclient_s
 	float		weapacc[10];
 	float		accuracy;
 	float		awareness;
-	char		chatmsg1[128];
-	char		chatmsg2[128];
-	char		chatmsg3[128];
-	char		chatmsg4[128];
-	char		chatmsg5[128];
-	char		chatmsg6[128];
-	char		chatmsg7[128];
-	char		chatmsg8[128];
+	char		chatmsg[8][128];
 	/*----------------------------*/
 
 	int			ammo_index;
@@ -1358,6 +1344,10 @@ struct gclient_s
 	int			breather_sound;
 
 	int			machinegun_shots;	// for weapon raising
+
+	float		lean; //for leaning around corners
+	int			zoomed; // for zooming in and out
+	int			zoomtime; // time of last zoom
 
 	// animation vars
 	int			anim_end;
@@ -1651,14 +1641,7 @@ struct edict_s
 	float weapacc[10];
 	float accuracy;
 	float awareness;
-	char		chatmsg1[128];
-	char		chatmsg2[128];
-	char		chatmsg3[128];
-	char		chatmsg4[128];
-	char		chatmsg5[128];
-	char		chatmsg6[128];
-	char		chatmsg7[128];
-	char		chatmsg8[128];
+	char		chatmsg[8][128];
 
 // ACEBOT_END
 	//chasecam

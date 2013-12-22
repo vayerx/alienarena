@@ -58,6 +58,11 @@ void SP_info_player_red(edict_t *self)
 		G_FreeEdict (self);
 		return;
 	}
+	if(g_tactical->integer)
+	{
+		self->s.modelindex = gi.modelindex("models/objects/dmspot/tris2.md2");
+		gi.linkentity (self);
+	}
 	//SP_misc_teleporter_dest (self);
 }
 void SP_info_player_blue(edict_t *self)
@@ -66,6 +71,11 @@ void SP_info_player_blue(edict_t *self)
 	{
 		G_FreeEdict (self);
 		return;
+	}
+	if(g_tactical->integer)
+	{
+		self->s.modelindex = gi.modelindex("models/objects/dmspot/tris1.md2");
+		gi.linkentity (self);
 	}
 	//SP_misc_teleporter_dest (self);
 }
@@ -230,24 +240,21 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 					total++;
 				}
 				place = total - pos;
-				if(place < 3) {
-					switch(place) {
-					case 0:
-						safe_centerprintf(attacker, "You fragged %s\n1st place with %i frags\n", cleanname, attacker->client->resp.score+1);
-						break;
-					case 1:
-						safe_centerprintf(attacker, "You fragged %s\n2nd place with %i frags\n", cleanname, attacker->client->resp.score+1);
-						break;
-					case 2:
-						safe_centerprintf(attacker, "You fragged %s\n3rd place with %i frags\n", cleanname, attacker->client->resp.score+1);
-						break;
-					default:
-						break;
-					}
-				}
-				else
+				switch(place)
+				{
+				case 0:
+					safe_centerprintf(attacker, "You fragged %s\n1st place with %i frags\n", cleanname, attacker->client->resp.score+1);
+					break;
+				case 1:
+					safe_centerprintf(attacker, "You fragged %s\n2nd place with %i frags\n", cleanname, attacker->client->resp.score+1);
+					break;
+				case 2:
+					safe_centerprintf(attacker, "You fragged %s\n3rd place with %i frags\n", cleanname, attacker->client->resp.score+1);
+					break;
+				default:
 					safe_centerprintf(attacker, "You fragged %s\n", cleanname);
-
+					break;
+				}
 			}
 
 			switch (mod)
@@ -321,36 +328,13 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 
 			if ( !(dmflags->integer & DF_BOTCHAT) && self->is_bot)
 			{
+				// FIXME: strange way to generate a random integer
 				msg = random() * 9;
-				switch(msg){
-				case 1:
-					chatmsg = self->chatmsg1;
-					break;
-				case 2:
-					chatmsg = self->chatmsg2;
-					break;
-				case 3:
-					chatmsg = self->chatmsg3;
-					break;
-				case 4:
-					chatmsg = self->chatmsg4;
-					break;
-				case 5:
-					chatmsg = self->chatmsg5;
-					break;
-				case 6:
-					chatmsg = self->chatmsg6;
-					break;
-				case 7:
-					chatmsg = self->chatmsg7;
-					break;
-				case 8:
-					chatmsg = self->chatmsg8;
-					break;
-				default:
+				if (msg > 0 && msg < 8)
+					chatmsg = self->chatmsg[msg-1];
+				else
 					chatmsg = "%s: Stop it %s, you punk!";
-					break;
-				}
+				
 				if(chatmsg) {
 					safe_bprintf (PRINT_CHAT, chatmsg, self->client->pers.netname, attacker->client->pers.netname);
 					safe_bprintf (PRINT_CHAT, "\n");
@@ -1109,22 +1093,22 @@ void InitClientPersistant (gclient_t *client)
 	if(instagib->integer) 
 	{
 		client->pers.inventory[ITEM_INDEX(FindItem("Alien Disruptor"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("cells"))] = g_maxcells->value;
+		client->pers.inventory[ITEM_INDEX(FindItem("cells"))] = g_maxCELLS->value;
 		item = FindItem("Alien Disruptor");
 	}
 	else if(rocket_arena->integer) 
 	{
 		client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = g_maxrockets->value;
+		client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = g_maxROCKETS->value;
 		item = FindItem("Rocket Launcher");
 	}
 	else if (insta_rockets->integer )
 	{
 		client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = g_maxrockets->value;
+		client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = g_maxROCKETS->value;
 		item = FindItem("Rocket Launcher");
 		client->pers.inventory[ITEM_INDEX(FindItem("Alien Disruptor"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("cells"))] = g_maxcells->value;
+		client->pers.inventory[ITEM_INDEX(FindItem("cells"))] = g_maxCELLS->value;
 		item = FindItem("Alien Disruptor");
 	}
 	else 
@@ -1139,43 +1123,26 @@ void InitClientPersistant (gclient_t *client)
 	{
 		//Allow custom health, even in excessive.
 		client->pers.health 		= g_spawnhealth->value * 3;
-		client->pers.max_bullets 	= g_maxbullets->value * 2.5;
-		client->pers.max_shells		= g_maxshells->value * 5;
-		client->pers.max_rockets	= g_maxrockets->value * 10;
-		client->pers.max_grenades	= g_maxgrenades->value * 10;
-		client->pers.max_cells		= g_maxcells->value * 2.5;
-		client->pers.max_slugs		= g_maxslugs->value * 10;
-		client->pers.max_seekers	= g_maxseekers->value * 3;
-		client->pers.max_bombs		= g_maxbombs->value * 2;
+		
+	#define X(name,itname,base,max,excessivemult) \
+		client->pers.inventory[ITEM_INDEX(FindItem(itname))] = g_max##name->value * excessivemult;
+		
+		AMMO_TYPES
+	
+	#undef X
 
 		client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = g_maxrockets->value * 10;
 		client->pers.inventory[ITEM_INDEX(FindItem("Pulse Rifle"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("bullets"))] = g_maxbullets->value * 2.5;
 		client->pers.inventory[ITEM_INDEX(FindItem("Alien Disruptor"))] = 1;
 		client->pers.inventory[ITEM_INDEX(FindItem("Disruptor"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("cells"))] = g_maxcells->value * 2.5;
 		client->pers.inventory[ITEM_INDEX(FindItem("Alien Smartgun"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("alien smart grenade"))] = g_maxshells->value * 5;
 		client->pers.inventory[ITEM_INDEX(FindItem("Alien Vaporizer"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("slugs"))] = g_maxslugs->value * 10;
 		client->pers.inventory[ITEM_INDEX(FindItem("Flame Thrower"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("napalm"))] = g_maxgrenades->value * 10;
 		client->pers.inventory[ITEM_INDEX(FindItem("Minderaser"))] = 1;
-		client->pers.inventory[ITEM_INDEX(FindItem("seekers"))] = g_maxseekers->value * 3;
-		client->pers.inventory[ITEM_INDEX(FindItem("bombs"))] = g_maxbombs->value * 2;
 	} 
 	else 
 	{
 		client->pers.health 		= g_spawnhealth->value;
-		client->pers.max_bullets 	= g_maxbullets->value;
-		client->pers.max_shells		= g_maxshells->value;
-		client->pers.max_rockets	= g_maxrockets->value;
-		client->pers.max_grenades	= g_maxgrenades->value;
-		client->pers.max_cells		= g_maxcells->value;
-		client->pers.max_slugs		= g_maxslugs->value;
-		client->pers.max_seekers	= g_maxseekers->value;
-		client->pers.max_bombs		= g_maxbombs->value;
 	}
 
 	if(vampire->value)
@@ -2054,6 +2021,8 @@ void PutClientInServer (edict_t *ent)
 		client->ps.fov = 160;
 
 	client->ps.gunindex = gi.modelindex(client->pers.weapon->view_model);
+
+	client->zoomed = false;
 
 	// clear entity state values
 	ent->s.effects = 0;
@@ -3509,10 +3478,45 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 		ucmd->forwardmove *= 1.3;
 
+		//clear lean		
+		client->lean = 0;
+
 		//tactical
 		if(g_tactical->integer)
 		{
 			client->dodge = false;
+			if (ucmd->buttons & BUTTON_LEANRIGHT)
+			{
+				AngleVectors (client->v_angle, NULL, right, NULL);
+				VectorScale (right, 32, ent->client->kick_origin);
+				client->kick_angles[ROLL] = client->lean = 45;
+			}		
+			if (ucmd->buttons & BUTTON_LEANLEFT)
+			{
+				AngleVectors (client->v_angle, NULL, right, NULL);
+				VectorScale (right, -32, ent->client->kick_origin);
+				client->kick_angles[ROLL] = client->lean = -45;
+			}
+			
+			if (ucmd->buttons & BUTTON_ZOOM)
+			{
+				if(level.time - client->zoomtime > FRAMETIME*10) //1 second delay between 
+				{
+					client->zoomed = !client->zoomed;
+					client->zoomtime = level.time;
+				}
+				if(client->zoomed)
+				{
+					client->ps.fov = 20;
+					ent->client->ps.stats[STAT_ZOOMED] = 1;
+				}
+				else
+				{
+					client->ps.fov = atoi(Info_ValueForKey(ent->client->pers.userinfo, "fov"));
+					ent->client->ps.stats[STAT_ZOOMED] = 0;
+					ent->client->kick_angles[0] = -3; //just a little kick to refresh the draw
+				}
+			}			
 		}
 		else
 		{
@@ -3690,7 +3694,7 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 		{
 			VectorCopy (pm.viewangles, client->v_angle);
 			VectorCopy (pm.viewangles, client->ps.viewangles);
-		}
+		}		
 
 		if (client->ctf_grapple)
 			CTFGrapplePull(client->ctf_grapple);

@@ -75,40 +75,6 @@ ALIAS MODELS
 ==============================================================================
 */
 
-typedef struct
-{
-	byte			v[3];			// scaled byte to fit in frame mins/maxs
-	byte			lightnormalindex;
-	byte			latlong[2];
-} mtrivertx_t;
-
-typedef struct
-{
-	float			scale[3];		// multiply byte verts by this
-	float			translate[3];	// then add this
-	mtrivertx_t		*verts;			// variable sized
-} maliasframe_t;
-
-typedef struct
-{
-	char			name[MAX_SKINNAME];
-} maliasskin_t;
-
-typedef struct
-{
-	int				num_skins;
-	maliasskin_t	*skins;
-
-	int				num_xyz;
-	int				num_tris;
-
-	int				num_glcmds;		// dwords in strip/fan command list
-	int				*glcmds;
-
-	int				num_frames;
-	maliasframe_t	*frames;
-} maliasmdl_t;
-
 //base player models and weapons for prechache
 typedef struct PModelList_s {
 
@@ -197,6 +163,14 @@ VERTEX ARRAYS
 ==============================================================================
 */
 
+typedef struct 
+{
+	//for BSP rendering-- not always cleared each frame
+	struct	msurface_s	*worldchain;
+	//for entity rendering-- cleared for each brush model drawn
+	struct	msurface_s	*entchain;
+} surfchain_t;
+
 typedef struct mtexinfo_s
 {
 	float		vecs[2][4];
@@ -212,15 +186,10 @@ typedef struct mtexinfo_s
 	struct		rscript_s	*script;
 	int			value;
 	
-	//for BSP rendering-- not always cleared each frame
-	struct 		msurface_s	*w_glsl_surfaces, 
-							*w_glsl_dynamic_surfaces, 
-							*w_lightmap_surfaces;
-	
-	//for entity rendering-- cleared for each brush model drawn
-	struct 		msurface_s	*e_glsl_surfaces, 
-							*e_glsl_dynamic_surfaces, 
-							*e_lightmap_surfaces;
+	// Surface linked lists: all surfaces in these lists are grouped together
+	// by texinfo so the renderer can take advantage of the fact that they 
+	// share the same texture and the same surface flags.
+	surfchain_t	glsl_surfaces, dynamic_surfaces, lightmap_surfaces;
 } mtexinfo_t;
 
 #define	VERTEXSIZE	10
@@ -349,7 +318,33 @@ typedef struct {
 
 } mragdoll_t;
 
-typedef enum {mod_bad, mod_brush, mod_sprite, mod_alias, mod_iqm } modtype_t;
+typedef enum {mod_bad, mod_brush, mod_md2, mod_iqm, num_modtypes} modtype_t;
+
+// This array is a look-up table for the traits of various mesh formats.
+static struct 
+{
+	// Morph target animation is what the MD2 format uses exclusively. Vertex
+	// positions, normals, and tangents are stored in VBOs for every frame
+	// and interpolated by the vertex shader. It's possible to combine this
+	// with skeletal animation, although we don't support any formats that do
+	// this yet.
+	qboolean morphtarget; 
+	
+	// If true, the blendweights and blendindexes vertex attributes are used.
+	// NOTE: this is still basically IQM-specific, we're not trying to
+	// generalize across every possible skeletal format-- yet.
+	qboolean skeletal;
+	
+	// True if the vertex data is indexed. If so, an IBO is used.
+	qboolean indexed;
+} modtypes[num_modtypes] = 
+{
+	{false, false, false},	// mod_bad- this is ignored
+	{false, false, false},	// mod_brush- BSP brush models- this is ignored
+	{true, false, false},	// mod_md2- MD2 models
+	{false, true, true},	// mod_iqm- IQM models
+	// New model types go here
+};
 
 typedef enum	{	simplecolor_white, simplecolor_green, simplecolor_blue, 
 					simplecolor_purple	} simplecolor_t;
@@ -433,30 +428,21 @@ typedef struct model_s
 
 	//iqm skeletal model info
 	unsigned int	version;
-	mvertex_t		*animatevertexes;
 	int				num_joints;
-	iqmjoint_t		*joints;
-	iqmjoint2_t		*joints2;
+	iqmjoint2_t		*joints; // when loading v1 files, joints are reencoded to v2 format
 	matrix3x4_t		*frames;
 	matrix3x4_t		*outframe;
 	matrix3x4_t		*baseframe;
 	int				num_poses;
-	int				num_triangles;
-	iqmtriangle_t	*tris;
-	mnormal_t		*normal;
-	mnormal_t		*animatenormal;
-	mtangent_t		*tangent;
-	mtangent_t		*animatetangent;
 	unsigned char	*blendindexes;
 	unsigned char	*blendweights;
 	char			skinname[MAX_QPATH];
 	char			*jointname;
 	//end iqm
 
-	//md2 only
-	byte		*tangents;
-
-	fstvert_t	*st;
+	//md2 and iqm.
+	int				num_triangles;
+	// TODO: we can remove this when shadow volumes are gone.
 	neighbors_t *neighbors;	
 
 	//ragdoll info

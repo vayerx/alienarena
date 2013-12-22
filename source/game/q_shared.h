@@ -168,14 +168,16 @@ extern vec3_t vec3_origin;
 
 #define Q_ftol( f ) ( long ) (f)
 
-#define DotProduct(x,y)			(x[0]*y[0]+x[1]*y[1]+x[2]*y[2])
-#define VectorSubtract(a,b,c)	(c[0]=a[0]-b[0],c[1]=a[1]-b[1],c[2]=a[2]-b[2])
-#define VectorAdd(a,b,c)		(c[0]=a[0]+b[0],c[1]=a[1]+b[1],c[2]=a[2]+b[2])
-#define VectorCopy(a,b)			(b[0]=a[0],b[1]=a[1],b[2]=a[2])
-#define VectorClear(a)			(a[0]=a[1]=a[2]=0)
-#define VectorNegate(a,b)		(b[0]=-a[0],b[1]=-a[1],b[2]=-a[2])
-#define VectorSet(v, x, y, z)	(v[0]=(x), v[1]=(y), v[2]=(z))
-#define	SnapVector(v) {v[0]=((int)(v[0]));v[1]=((int)(v[1]));v[2]=((int)(v[2]));}
+#define DotProduct(x,y)				((x)[0]*(y)[0]+(x)[1]*(y)[1]+(x)[2]*(y)[2])
+#define VectorSubtract(a,b,o)		((o)[0]=(a)[0]-(b)[0],(o)[1]=(a)[1]-(b)[1],(o)[2]=(a)[2]-(b)[2])
+#define VectorAdd(a,b,o)			((o)[0]=(a)[0]+(b)[0],(o)[1]=(a)[1]+(b)[1],(o)[2]=(a)[2]+(b)[2])
+#define VectorCopy(i,o)				((o)[0]=(i)[0],(o)[1]=(i)[1],(o)[2]=(i)[2])
+#define VectorClear(a)				((a)[0]=(a)[1]=(a)[2]=0)
+#define VectorNegate(i,o)			((o)[0]=-(i)[0],(o)[1]=-(i)[1],(o)[2]=-(i)[2])
+#define VectorSet(v, x, y, z)		((v)[0]=(x), (v)[1]=(y), (v)[2]=(z))
+#define	SnapVector(v)				{(v)[0]=(int)(v)[0];(v)[1]=(int)(v)[1];(v)[2]=(int)(v)[2];}
+// o will be the elementwise product (i.e. Hadamard product) of a and b:
+#define VectorComponentMul(a,b,o)	((o)[0]=(a)[0]*(b)[0],(o)[1]=(a)[1]*(b)[1],(o)[2]=(a)[2]*(b)[2])
 
 void VectorMA (vec3_t veca, float scale, vec3_t vecb, vec3_t vecc);
 
@@ -209,9 +211,6 @@ int Q_log2(int val);
 
 void R_ConcatRotations (float in1[3][3], float in2[3][3], float out[3][3]);
 void R_ConcatTransforms (float in1[3][4], float in2[3][4], float out[3][4]);
-
-void NormalToLatLong( const vec3_t normal, byte latlong[2] );
-void LatLongToNormal( byte latlong[2], vec3_t normal );
 
 void fast_sincosf( float angle, float *sina, float *cosa );
 void AngleVectors (vec3_t angles, vec3_t forward, vec3_t right, vec3_t up);
@@ -289,6 +288,8 @@ float	LittleFloat (float l);
 
 void	Swap_Init (void);
 char	*va(char *format, ...);
+float	*atv(void);
+float	*tv (float x, float y, float z);
 
 //=============================================
 
@@ -572,6 +573,9 @@ typedef struct
 #define	BUTTON_ATTACK		1
 #define	BUTTON_USE			2
 #define BUTTON_ATTACK2		4
+#define BUTTON_LEANLEFT		8
+#define BUTTON_LEANRIGHT	16
+#define BUTTON_ZOOM			32
 #define	BUTTON_ANY			128			// any key whatsoever
 
 // usercmd_t is sent to the server each client frame
@@ -664,6 +668,8 @@ typedef struct
 #define RF_MONSTER  		0x00080000
 #define	RF_NODRAW			0x00100000 //use this instead of a 0 modelindex for compatibility.
 #define RF_MENUMODEL		0x01280000 //for player menu
+
+#define RF_SHELL_ANY		(RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE | RF_SHELL_HALF_DAM | RF_SHELL_DOUBLE)
 
 
 // player_state_t->refdef flags

@@ -1155,6 +1155,9 @@ char *bindnames[][2] =
 {"+moveright", 		"step right"},
 {"+moveup",			"up / jump"},
 {"+movedown",		"down / crouch"},
+{"+leanright",		"lean right(tactical)"},
+{"+leanleft",		"lean left(tactical)"},
+{"+zoom",			"zoom(tactical)"},
 
 {"inven",			"inventory"},
 {"invuse",			"use item"},
@@ -1516,11 +1519,10 @@ static void NumberFieldOptionFunc (void *_self)
 	num = atoi (self->buffer);
 	clamped_num = clamp (num, fieldsize->min_value, fieldsize->max_value);
 	
+	Com_sprintf (self->buffer, sizeof(self->buffer), "%d", num);
+	self->cursor = clamp (self->cursor, 0, strlen (self->buffer));
 	if (num != clamped_num)
-	{
-		Com_sprintf (self->buffer, sizeof(self->buffer), "%d", clamped_num);
-		self->cursor = strlen (self->buffer);
-	}
+		Com_sprintf (self->buffer, sizeof(self->buffer), "%d  ^1(%d)", num, clamped_num);
 	
 	Cvar_SetValue (cvarname, clamped_num);
 }
@@ -1676,7 +1678,7 @@ void Option_Setup (menumultival_s *item, option_name_t *optionname)
 			fieldsize = optionname->fieldsize;
 			item->generic.type = MTYPE_FIELD;
 			item->generic.flags |= QMF_NUMBERSONLY;
-			item->generic.visible_length = fieldsize->maxchars;
+			item->generic.visible_length = 2*fieldsize->maxchars;
 			item->cursor = 0;
 			memset (item->buffer, 0, sizeof(item->buffer));
 			item->generic.callback = NumberFieldOptionFunc;
@@ -2087,7 +2089,7 @@ static const char *handedness_names[] =
 
 sliderlimit_t mousespeed_limits = 
 {
-	0, 110, 0.0f, 11.0f
+	1, 111, 0.1f, 11.1f
 };
 
 fieldsize_t fov_limits = 
@@ -2412,13 +2414,6 @@ option_name_t video_option_names[] =
 		"texture quality",
 		NULL,
 		setnames (texquality_items)
-	},
-	{
-		option_spincontrol,
-		"gl_glsl_shaders",
-		"GLSL shaders",
-		NULL,
-		setnames (onoff_names)
 	},
 	{
 		option_spincontrol,
@@ -3961,9 +3956,6 @@ void M_UpdateConnectedServerInfo (netadr_t adr, char *status_string)
 void DeselectServer (void)
 {
 	serverindex = -1;
-	s_servers[serverindex].serverinfo_submenu.nitems = 0;
-	s_servers[serverindex].playerlist_scrollingmenu.nitems = 0;
-	s_servers[serverindex].modlist_submenu.nitems = 0;
 }
 
 void SelectServer (int index)
@@ -4269,7 +4261,7 @@ static const char *mutatorNames[][2] =
 	{"grapple hook",	"grapple"}
 };
 #define num_mutators static_array_size(mutatorNames)
-static menulist_s s_mutator_list[num_mutators];
+static menulist_s s_mutator_list[ num_mutators  ];
 static menufield_s s_camptime;
 
 static char dmflags_display_buffer[128];
@@ -4386,7 +4378,7 @@ static void M_Menu_Mutators_f (void)
 	{
 		s_mutator_list[i].generic.name = mutatorNames[i][0];
 		s_mutator_list[i].generic.callback = SpinOptionFunc;
-		s_mutator_list[i].generic.localstrings[0] = weaponModeNames[i][1];
+		s_mutator_list[i].generic.localstrings[0] = mutatorNames[i][1];
 		s_mutator_list[i].curvalue = Cvar_VariableValue (mutatorNames[i][1]);
 		setup_tickbox (s_mutator_list[i]);
 		Menu_AddItem (&s_mutators_menu, &s_mutator_list[i]);

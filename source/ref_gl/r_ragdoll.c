@@ -439,29 +439,14 @@ void RGD_RagdollBody_Init( int RagDollID, vec3_t origin, char name[MAX_QPATH] )
 	{
 		for(j = 0; j < RagDollBindsCount; j++)
 		{
-			if(RagDoll[RagDollID].ragDollMesh->version == 1)
+			if(!strcmp(&RagDoll[RagDollID].ragDollMesh->jointname[RagDoll[RagDollID].ragDollMesh->joints[i].name], RagDollBinds[j].name))
 			{
-				if(!strcmp(&RagDoll[RagDollID].ragDollMesh->jointname[RagDoll[RagDollID].ragDollMesh->joints[i].name], RagDollBinds[j].name))
-				{
-					int object = RagDollBinds[j].object;
-					if ( ! IS_NAN( RagDoll[RagDollID].initframe[i].a[0] ) ) {
-						Matrix3x4_Add(&bindmat[object], bindmat[object], RagDoll[RagDollID].initframe[i]);
-					}
-					bindweight[object]++;
-					break;
+				int object = RagDollBinds[j].object;
+				if ( ! IS_NAN( RagDoll[RagDollID].initframe[i].a[0] ) ) {
+					Matrix3x4_Add(&bindmat[object], bindmat[object], RagDoll[RagDollID].initframe[i]);
 				}
-			}
-			else
-			{
-				if(!strcmp(&RagDoll[RagDollID].ragDollMesh->jointname[RagDoll[RagDollID].ragDollMesh->joints2[i].name], RagDollBinds[j].name))
-				{
-					int object = RagDollBinds[j].object;
-					if ( ! IS_NAN( RagDoll[RagDollID].initframe[i].a[0] ) ) {
-						Matrix3x4_Add(&bindmat[object], bindmat[object], RagDoll[RagDollID].initframe[i]);
-					}
-					bindweight[object]++;
-					break;
-				}
+				bindweight[object]++;
+				break;
 			}
 		}		
 	}
@@ -1124,6 +1109,7 @@ void R_RenderAllRagdolls ( void )
 				continue;
 
 			//render the meshes
+			GL_SelectTexture (0);
 			qglShadeModel (GL_SMOOTH);
 			GL_TexEnv( GL_MODULATE );
 
@@ -1142,7 +1128,6 @@ void R_RenderAllRagdolls ( void )
 			}
 
 			//check for valid script
-			use_vbo = true;
 			if(RagDoll[RagDollID].script && RagDoll[RagDollID].script->stage)
 			{
 				if(!strcmp("***r_notexture***", RagDoll[RagDollID].script->stage->texture->name) || 
@@ -1150,18 +1135,17 @@ void R_RenderAllRagdolls ( void )
 					(RagDoll[RagDollID].script->stage->cube && !strcmp("***r_notexture***", RagDoll[RagDollID].script->stage->texture3->name)))
 				{
 					RagDoll[RagDollID].script = NULL; //bad shader!
-					use_vbo = false; //cannot use vbo without a valid shader
 				}
 			}
 
+			currentmodel = RagDoll[RagDollID].ragDollMesh;
+			
 			R_GetLightVals(RagDoll[RagDollID].curPos, true);
 
 			R_GenerateRagdollShadow(RagDollID);
 
-			IQM_AnimateRagdoll(RagDollID, shellEffect);
+			IQM_AnimateRagdoll(RagDollID);
 
-			currentmodel = RagDoll[RagDollID].ragDollMesh;
-			
 			// HACK: This is a bit wasteful, but it allows us to reuse code
 			// that expects these values to be in an entity_t struct.
 			VectorCopy (RagDoll[RagDollID].curPos, RagDollEntity.origin);
@@ -1170,8 +1154,9 @@ void R_RenderAllRagdolls ( void )
 			RagDollEntity.flags = shellEffect?RF_SHELL_RED:0;
 			currententity = &RagDollEntity;
 
-			IQM_DrawFrame (RagDoll[RagDollID].texnum, true, shellAlpha);
+			R_Mesh_DrawFrame (RagDoll[RagDollID].texnum, true, shellAlpha);
 
+			GL_SelectTexture (0);
 			GL_TexEnv( GL_REPLACE );
 			qglShadeModel (GL_FLAT);
 			

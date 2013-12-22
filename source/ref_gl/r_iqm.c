@@ -24,45 +24,21 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "r_local.h"
 #include "r_iqm.h"
 #include "r_ragdoll.h"
-#include "r_lodcalc.h"
-
-#define RAGDOLLVBO 1
 
 #if !defined max
 #define max(a,b)  (((a)<(b)) ? (b) : (a))
 #endif
 
-static vec3_t NormalsArray[MAX_VERTICES];
-static vec4_t TangentsArray[MAX_VERTICES];
-
-static vertCache_t	*vbo_st;
-static vertCache_t	*vbo_xyz;
-static vertCache_t	*vbo_normals;
-static vertCache_t *vbo_tangents;
-static vertCache_t *vbo_indices;
-static qboolean has_vbo;
-qboolean use_vbo;
-
-float modelpitch;
-
-extern  void Q_strncpyz( char *dest, const char *src, size_t size );
-extern void MYgluPerspective(GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zFar);
+// This function will compute the quaternion's W based on its X, Y, and Z.)
+void Vec4_CompleteQuatW (vec4_t q)
+{
+	vec3_t q_xyz;
+	
+	VectorCopy (q, q_xyz);
+	q[3] = -sqrt (max (1.0 - pow (VectorLength (q_xyz), 2), 0.0));
+}
 
 //these matrix functions should be moved to matrixlib.c or similar
-
-void Matrix3x4_TransformNormal(mnormal_t *out, matrix3x4_t mat, const mnormal_t in)
-{
-	out->dir[0] = DotProduct(mat.a, in.dir);
-	out->dir[1] = DotProduct(mat.b, in.dir);
-	out->dir[2] = DotProduct(mat.c, in.dir);
-}
-
-void Matrix3x4_TransformTangent(mtangent_t *out, matrix3x4_t mat, const mtangent_t in)
-{
-	out->dir[0] = DotProduct(mat.a, in.dir);
-	out->dir[1] = DotProduct(mat.b, in.dir);
-	out->dir[2] = DotProduct(mat.c, in.dir);
-}
 
 void Matrix3x4_Invert(matrix3x4_t *out, matrix3x4_t in)
 {
@@ -137,24 +113,6 @@ void Matrix3x4_Scale(matrix3x4_t *out, matrix3x4_t in, float scale)
 	Vector4Scale(in.c, scale, out->c);
 }
 
-void Matrix3x4_ScaleAdd (matrix3x4_t *out, matrix3x4_t *base, float scale, matrix3x4_t *add)
-{
-   out->a[0] = base->a[0] * scale + add->a[0];
-   out->a[1] = base->a[1] * scale + add->a[1];
-   out->a[2] = base->a[2] * scale + add->a[2];
-   out->a[3] = base->a[3] * scale + add->a[3];
-
-   out->b[0] = base->b[0] * scale + add->b[0];
-   out->b[1] = base->b[1] * scale + add->b[1];
-   out->b[2] = base->b[2] * scale + add->b[2];
-   out->b[3] = base->b[3] * scale + add->b[3];
-
-   out->c[0] = base->c[0] * scale + add->c[0];
-   out->c[1] = base->c[1] * scale + add->c[1];
-   out->c[2] = base->c[2] * scale + add->c[2];
-   out->c[3] = base->c[3] * scale + add->c[3];
-}
-
 void Matrix3x4_Add(matrix3x4_t *out, matrix3x4_t mat1, matrix3x4_t mat2)
 {
 	Vector4Add(mat1.a, mat2.a, out->a);
@@ -176,13 +134,6 @@ void Matrix3x4_Copy(matrix3x4_t *out, matrix3x4_t in)
 	Vector4Copy(in.c, out->c);
 }
 
-void Matrix3x4_Transform(mvertex_t *out, matrix3x4_t mat, const mvertex_t in)
-{
-	out->position[0] = DotProduct(mat.a, in.position) + mat.a[3];
-    out->position[1] = DotProduct(mat.b, in.position) + mat.b[3];
-    out->position[2] = DotProduct(mat.c, in.position) + mat.c[3];
-}
-
 void Matrix3x4GenRotate(matrix3x4_t *out, float angle, const vec3_t axis)
 {
 	float ck = cos(angle), sk = sin(angle);
@@ -192,7 +143,7 @@ void Matrix3x4GenRotate(matrix3x4_t *out, float angle, const vec3_t axis)
 	Vector4Set(out->c, axis[0]*axis[2]*(1-ck)-axis[1]*sk, axis[1]*axis[2]*(1-ck)+axis[0]*sk, axis[2]*axis[2]*(1-ck)+ck, 0);
 }
 
-void Matrix3x4ForEntity(matrix3x4_t *out, entity_t *ent, float z)
+void Matrix3x4ForEntity(matrix3x4_t *out, entity_t *ent)
 {
     matrix3x4_t rotmat;
     vec3_t rotaxis;
@@ -229,49 +180,33 @@ void Matrix3x4GenFromODE(matrix3x4_t *out, const dReal *rot, const dReal *trans)
 	Vector4Set(out->c, rot[8], rot[9], rot[10], trans[2]);
 }
 
-double degreeToRadian(double degree)
-{
-	double radian = 0;
-	radian = degree * (pi/180);
-	return radian;
-}
-
-void IQM_LoadVertexArrays(model_t *iqmmodel, float *vposition, float *vnormal, float *vtangent)
+void IQM_ByteswapVertexArrays(model_t *iqmmodel, float *vposition, float *vnormal, float *vtangent, float *vtexcoord, int *vtriangles)
 {
 	int i;
 
 	if(iqmmodel->numvertexes > 16384)
 		return;
+	
+	for(i = 0; i < iqmmodel->numvertexes*2; i++)
+	{
+		*vtexcoord = LittleFloat (*vtexcoord);
+		vtexcoord++;
+	}
 
-	iqmmodel->vertexes = (mvertex_t*)Hunk_Alloc(iqmmodel->numvertexes * sizeof(mvertex_t));
-	iqmmodel->normal = (mnormal_t*)Hunk_Alloc(iqmmodel->numvertexes * sizeof(mnormal_t));
-	iqmmodel->tangent = (mtangent_t*)Hunk_Alloc(iqmmodel->numvertexes * sizeof(mtangent_t));
-
-	//set this now for later use
-	iqmmodel->animatevertexes = (mvertex_t*)Hunk_Alloc(iqmmodel->numvertexes * sizeof(mvertex_t));
-	iqmmodel->animatenormal = (mnormal_t*)Hunk_Alloc(iqmmodel->numvertexes * sizeof(mnormal_t));
-	iqmmodel->animatetangent = (mtangent_t*)Hunk_Alloc(iqmmodel->numvertexes * sizeof(mtangent_t));
-
-	for(i=0; i<iqmmodel->numvertexes; i++){
-		VectorSet(iqmmodel->vertexes[i].position,
-					LittleFloat(vposition[0]),
-					LittleFloat(vposition[1]),
-					LittleFloat(vposition[2]));
-
-		VectorSet(iqmmodel->normal[i].dir,
-					LittleFloat(vnormal[0]),
-					LittleFloat(vnormal[1]),
-					LittleFloat(vnormal[2]));
-
-		Vector4Set(iqmmodel->tangent[i].dir,
-					LittleFloat(vtangent[0]),
-					LittleFloat(vtangent[1]),
-					LittleFloat(vtangent[2]),
-					LittleFloat(vtangent[3]));
-
-		vposition	+=3;
-		vnormal		+=3;
-		vtangent	+=4;
+	for(i = 0; i < iqmmodel->numvertexes*3; i++)
+	{
+		*vposition = LittleFloat (*vposition);
+		*vnormal = LittleFloat (*vnormal);
+		*vtriangles = LittleLong (*vtriangles);
+		vposition++;
+		vnormal++;
+		vtriangles++;
+	}
+	
+	for (i = 0; i < iqmmodel->numvertexes*4; i++)
+	{
+		*vtangent = LittleFloat (*vtangent);
+		vtangent++;
 	}
 }
 
@@ -361,11 +296,23 @@ qboolean IQM_ReadRagDollFile(char ragdoll_file[MAX_OSPATH], model_t *mod)
 	return true;
 }
 
+void IQM_LoadVBO (model_t *mod, float *vposition, float *vnormal, float *vtangent, float *vtexcoord, int *vtriangles)
+{
+	R_VCLoadData(VBO_STATIC, mod->numvertexes*sizeof(vec2_t), vtexcoord, VBO_STORE_ST, mod);
+	R_VCLoadData(VBO_STATIC, mod->numvertexes*sizeof(vec3_t), vposition, VBO_STORE_XYZ, mod);
+	R_VCLoadData(VBO_STATIC, mod->numvertexes*sizeof(vec3_t), vnormal, VBO_STORE_NORMAL, mod);
+	R_VCLoadData(VBO_STATIC, mod->numvertexes*sizeof(vec4_t), vtangent, VBO_STORE_TANGENT, mod);
+	R_VCLoadData(VBO_STATIC, mod->num_triangles*3*sizeof(unsigned int), vtriangles, VBO_STORE_INDICES, mod);
+}
+
+// NOTE: this should be the only function that needs to care what version the
+// IQM file is.
 qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 {
 	iqmheader_t *header;
 	int i, j, k;
 	const int *inelements;
+	int *vtriangles = NULL;
 	float *vposition = NULL, *vtexcoord = NULL, *vnormal = NULL, *vtangent = NULL;
 	//unsigned char *vblendweights = NULL;
 	unsigned char *pbase;
@@ -504,10 +451,10 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 	mod->num_triangles = header->num_triangles;
 
 	// load the joints
+	mod->joints = (iqmjoint2_t*)Hunk_Alloc (header->num_joints * sizeof(iqmjoint2_t));
 	if( header->version == 1 )
 	{
 		joint = (iqmjoint_t *) (pbase + header->ofs_joints);
-		mod->joints = (iqmjoint_t*)Hunk_Alloc (header->num_joints * sizeof(iqmjoint_t));
 		for (i = 0;i < mod->num_joints;i++)
 		{
 			mod->joints[i].name = LittleLong(joint[i].name);
@@ -518,131 +465,70 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 				mod->joints[i].rotation[j] = LittleFloat(joint[i].rotation[j]);
 				mod->joints[i].scale[j] = LittleFloat(joint[i].scale[j]);
 			}
+			// If the quaternion w is not already included, calculate it.
+			Vec4_CompleteQuatW (mod->joints[i].rotation);
 		}
 	}
 	else
 	{
 		joint2 = (iqmjoint2_t *) (pbase + header->ofs_joints);
-		mod->joints2 = (iqmjoint2_t*)Hunk_Alloc (header->num_joints * sizeof(iqmjoint2_t));
 		for (i = 0;i < mod->num_joints;i++)
 		{
-			mod->joints2[i].name = LittleLong(joint2[i].name);
-			mod->joints2[i].parent = LittleLong(joint2[i].parent);
+			mod->joints[i].name = LittleLong(joint2[i].name);
+			mod->joints[i].parent = LittleLong(joint2[i].parent);
 			for (j = 0;j < 3;j++)
 			{
-				mod->joints2[i].origin[j] = LittleFloat(joint2[i].origin[j]);
-				mod->joints2[i].rotation[j] = LittleFloat(joint2[i].rotation[j]);
-				mod->joints2[i].scale[j] = LittleFloat(joint2[i].scale[j]);
+				mod->joints[i].origin[j] = LittleFloat(joint2[i].origin[j]);
+				mod->joints[i].rotation[j] = LittleFloat(joint2[i].rotation[j]);
+				mod->joints[i].scale[j] = LittleFloat(joint2[i].scale[j]);
 			}
-			mod->joints2[i].rotation[3] = LittleFloat(joint2[i].rotation[3]);
+			mod->joints[i].rotation[3] = LittleFloat(joint2[i].rotation[3]);
 		}
 	}
-	//these don't need to be a part of mod - remember to free them
+	
+	// needed for bending the model in other ways besides the built-in
+	// animation.
 	mod->baseframe = (matrix3x4_t*)Hunk_Alloc (header->num_joints * sizeof(matrix3x4_t));
+	
+	// this doesn't need to be a part of mod - remember to free it
 	inversebaseframe = (matrix3x4_t*)malloc (header->num_joints * sizeof(matrix3x4_t));
 
-	if( header->version == 1 )
+	for(i = 0; i < (int)header->num_joints; i++)
 	{
-		for(i = 0; i < (int)header->num_joints; i++)
+		iqmjoint2_t j = mod->joints[i];
+
+		Matrix3x4_FromQuatAndVectors(&mod->baseframe[i], j.rotation, j.origin, j.scale);
+		Matrix3x4_Invert(&inversebaseframe[i], mod->baseframe[i]);
+
+		assert(j.parent < (int)header->num_joints);
+
+		if(j.parent >= 0)
 		{
-			vec3_t rot;
-			vec4_t q_rot;
-			iqmjoint_t j = mod->joints[i];
-
-			//first need to make a vec4 quat from our rotation vec
-			VectorSet(rot, j.rotation[0], j.rotation[1], j.rotation[2]);
-			Vector4Set(q_rot, j.rotation[0], j.rotation[1], j.rotation[2], -sqrt(max(1.0 - pow(VectorLength(rot),2), 0.0)));
-
-			Matrix3x4_FromQuatAndVectors(&mod->baseframe[i], q_rot, j.origin, j.scale);
-			Matrix3x4_Invert(&inversebaseframe[i], mod->baseframe[i]);
-
-			if(j.parent >= 0)
-			{
-				matrix3x4_t temp;
-				Matrix3x4_Multiply(&temp, mod->baseframe[j.parent], mod->baseframe[i]);
-				mod->baseframe[i] = temp;
-				Matrix3x4_Multiply(&temp, inversebaseframe[i], inversebaseframe[j.parent]);
-				inversebaseframe[i] = temp;
-			}
-		}
-	}
-	else
-	{
-		for(i = 0; i < (int)header->num_joints; i++)
-		{
-			iqmjoint2_t j = mod->joints2[i];
-
-			Matrix3x4_FromQuatAndVectors(&mod->baseframe[i], j.rotation, j.origin, j.scale);
-			Matrix3x4_Invert(&inversebaseframe[i], mod->baseframe[i]);
-
-			assert(j.parent < (int)header->num_joints);
-
-			if(j.parent >= 0)
-			{
-				matrix3x4_t temp;
-				Matrix3x4_Multiply(&temp, mod->baseframe[j.parent], mod->baseframe[i]);
-				mod->baseframe[i] = temp;
-				Matrix3x4_Multiply(&temp, inversebaseframe[i], inversebaseframe[j.parent]);
-				inversebaseframe[i] = temp;
-			}
+			matrix3x4_t temp;
+			Matrix3x4_Multiply(&temp, mod->baseframe[j.parent], mod->baseframe[i]);
+			mod->baseframe[i] = temp;
+			Matrix3x4_Multiply(&temp, inversebaseframe[i], inversebaseframe[j.parent]);
+			inversebaseframe[i] = temp;
 		}
 	}
 
-	if( header->version == 1 )
 	{
+		int translate_size, rotate_size, scale_size;
+		
+		if (header->version == 1)
+		{
+			translate_size = 3;
+			rotate_size = 3;
+			scale_size = 3;
+		}
+		else
+		{
+			translate_size = 3;
+			rotate_size = 4; // quaternion w is included in the v2 file format
+			scale_size = 3;
+		}
+		
 		poses = (iqmpose_t *) (pbase + header->ofs_poses);
-		mod->frames = (matrix3x4_t*)Hunk_Alloc (header->num_frames * header->num_poses * sizeof(matrix3x4_t));
-		framedata = (unsigned short *) (pbase + header->ofs_frames);
-
-		for(i = 0; i < header->num_frames; i++)
-		{
-			for(j = 0; j < header->num_poses; j++)
-			{
-				iqmpose_t p = poses[j];
-				vec3_t translate, rotate, scale;
-				vec4_t q_rot;
-				matrix3x4_t m, temp;
-
-				p.parent = LittleLong(p.parent);
-                                p.channelmask = LittleLong(p.channelmask);
-                                for(k = 0; k < 9; k++)
-                                {
-                                        p.channeloffset[k] = LittleFloat(p.channeloffset[k]);
-                                        p.channelscale[k] = LittleFloat(p.channelscale[k]);
-                                }
-
-				translate[0] = p.channeloffset[0]; if(p.channelmask&0x01) translate[0] += (unsigned short)LittleShort(*framedata++) * p.channelscale[0];
-				translate[1] = p.channeloffset[1]; if(p.channelmask&0x02) translate[1] += (unsigned short)LittleShort(*framedata++) * p.channelscale[1];
-				translate[2] = p.channeloffset[2]; if(p.channelmask&0x04) translate[2] += (unsigned short)LittleShort(*framedata++) * p.channelscale[2];
-				rotate[0] = p.channeloffset[3]; if(p.channelmask&0x08) rotate[0] += (unsigned short)LittleShort(*framedata++) * p.channelscale[3];
-				rotate[1] = p.channeloffset[4]; if(p.channelmask&0x10) rotate[1] += (unsigned short)LittleShort(*framedata++) * p.channelscale[4];
-				rotate[2] = p.channeloffset[5]; if(p.channelmask&0x20) rotate[2] += (unsigned short)LittleShort(*framedata++) * p.channelscale[5];
-				scale[0] = p.channeloffset[6]; if(p.channelmask&0x40) scale[0] += (unsigned short)LittleShort(*framedata++) * p.channelscale[6];
-				scale[1] = p.channeloffset[7]; if(p.channelmask&0x80) scale[1] += (unsigned short)LittleShort(*framedata++) * p.channelscale[7];
-				scale[2] = p.channeloffset[8]; if(p.channelmask&0x100) scale[2] += (unsigned short)LittleShort(*framedata++) * p.channelscale[8];
-				// Concatenate each pose with the inverse base pose to avoid doing this at animation time.
-				// If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
-				// Thus it all negates at animation time like so:
-				//   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
-				//   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
-				//   parentPose * childPose * childInverseBasePose
-
-				Vector4Set(q_rot, rotate[0], rotate[1], rotate[2], -sqrt(max(1.0 - pow(VectorLength(rotate),2), 0.0)));
-
-				Matrix3x4_FromQuatAndVectors(&m, q_rot, translate, scale);
-
-				if(p.parent >= 0)
-				{
-					Matrix3x4_Multiply(&temp, mod->baseframe[p.parent], m);
-					Matrix3x4_Multiply(&mod->frames[i*header->num_poses+j], temp, inversebaseframe[j]);
-				}
-				else
-					Matrix3x4_Multiply(&mod->frames[i*header->num_poses+j], m, inversebaseframe[j]);
-			}
-		}
-	}
-	else
-	{
 		poses2 = (iqmpose2_t *) (pbase + header->ofs_poses);
 		mod->frames = (matrix3x4_t*)Hunk_Alloc (header->num_frames * header->num_poses * sizeof(matrix3x4_t));
 		framedata = (unsigned short *) (pbase + header->ofs_frames);
@@ -651,29 +537,49 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 		{
 			for(j = 0; j < header->num_poses; j++)
 			{
-				iqmpose2_t p = poses2[j];
+				int datanum;
+				
+				signed int parent;
+				unsigned int channelmask;
+				float *channeloffset, *channelscale;
 				vec3_t translate, scale;
 				vec4_t rotate;
 				matrix3x4_t m, temp;
-
-				p.parent = LittleLong(p.parent);
-				p.channelmask = LittleLong(p.channelmask);
-				for(k = 0; k < 10; k++)
+				
+				if (header->version == 1)
 				{
-					p.channeloffset[k] = LittleFloat(p.channeloffset[k]);
-					p.channelscale[k] = LittleFloat(p.channelscale[k]);
+					parent = LittleLong(poses[j].parent);
+					channelmask = LittleLong(poses[j].channelmask);
+					channeloffset = poses[j].channeloffset;
+					channelscale = poses[j].channelscale;
+				}
+				else
+				{
+					parent = LittleLong(poses2[j].parent);
+					channelmask = LittleLong(poses2[j].channelmask);
+					channeloffset = poses2[j].channeloffset;
+					channelscale = poses2[j].channelscale;
 				}
 
-				translate[0] = p.channeloffset[0]; if(p.channelmask&0x01) translate[0] += (unsigned short)LittleShort(*framedata++) * p.channelscale[0];
-				translate[1] = p.channeloffset[1]; if(p.channelmask&0x02) translate[1] += (unsigned short)LittleShort(*framedata++) * p.channelscale[1];
-				translate[2] = p.channeloffset[2]; if(p.channelmask&0x04) translate[2] += (unsigned short)LittleShort(*framedata++) * p.channelscale[2];
-				rotate[0] = p.channeloffset[3]; if(p.channelmask&0x08) rotate[0] += (unsigned short)LittleShort(*framedata++) * p.channelscale[3];
-				rotate[1] = p.channeloffset[4]; if(p.channelmask&0x10) rotate[1] += (unsigned short)LittleShort(*framedata++) * p.channelscale[4];
-				rotate[2] = p.channeloffset[5]; if(p.channelmask&0x20) rotate[2] += (unsigned short)LittleShort(*framedata++) * p.channelscale[5];
-				rotate[3] = p.channeloffset[6]; if(p.channelmask&0x40) rotate[3] += (unsigned short)LittleShort(*framedata++) * p.channelscale[6];
-				scale[0] = p.channeloffset[7]; if(p.channelmask&0x80) scale[0] += (unsigned short)LittleShort(*framedata++) * p.channelscale[7];
-				scale[1] = p.channeloffset[8]; if(p.channelmask&0x100) scale[1] += (unsigned short)LittleShort(*framedata++) * p.channelscale[8];
-				scale[2] = p.channeloffset[9]; if(p.channelmask&0x200) scale[2] += (unsigned short)LittleShort(*framedata++) * p.channelscale[9];
+				datanum = 0;
+				for (k = 0; k < translate_size; k++, datanum++)
+				{
+					translate[k] = LittleFloat (channeloffset[datanum]);
+					if ((channelmask & (1<<datanum)))
+						translate[k] += (unsigned short)LittleShort(*framedata++) * LittleFloat (channelscale[datanum]);
+				}
+				for (k = 0; k < rotate_size; k++, datanum++)
+				{
+					rotate[k] = LittleFloat (channeloffset[datanum]);
+					if ((channelmask & (1<<datanum)))
+						rotate[k] += (unsigned short)LittleShort(*framedata++) * LittleFloat (channelscale[datanum]);
+				}
+				for (k = 0; k < scale_size; k++, datanum++)
+				{
+					scale[k] = LittleFloat (channeloffset[datanum]);
+					if ((channelmask & (1<<datanum)))
+						scale[k] += (unsigned short)LittleShort(*framedata++) * LittleFloat (channelscale[datanum]);
+				}
 				// Concatenate each pose with the inverse base pose to avoid doing this at animation time.
 				// If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
 				// Thus it all negates at animation time like so:
@@ -681,11 +587,15 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 				//   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
 				//   parentPose * childPose * childInverseBasePose
 
+				// If the quaternion w is not already included, calculate it.
+				if (header->version == 1)
+					Vec4_CompleteQuatW (rotate);
+
 				Matrix3x4_FromQuatAndVectors(&m, rotate, translate, scale);
 
-				if(p.parent >= 0)
+				if(parent >= 0)
 				{
-					Matrix3x4_Multiply(&temp, mod->baseframe[p.parent], m);
+					Matrix3x4_Multiply(&temp, mod->baseframe[parent], m);
 					Matrix3x4_Multiply(&mod->frames[i*header->num_poses+j], temp, inversebaseframe[j]);
 				}
 				else
@@ -699,30 +609,24 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 	// load bounding box data
 	if (header->ofs_bounds)
 	{
-		float xyradius = 0, radius = 0;
+		float radius = 0;
 		bounds = (iqmbounds_t *) (pbase + header->ofs_bounds);
 		VectorClear(mod->mins);
 		VectorClear(mod->maxs);
 		for (i = 0; i < (int)header->num_frames;i++)
 		{
-			bounds[i].mins[0] = LittleFloat(bounds[i].mins[0]);
-			bounds[i].mins[1] = LittleFloat(bounds[i].mins[1]);
-			bounds[i].mins[2] = LittleFloat(bounds[i].mins[2]);
-			bounds[i].maxs[0] = LittleFloat(bounds[i].maxs[0]);
-			bounds[i].maxs[1] = LittleFloat(bounds[i].maxs[1]);
-			bounds[i].maxs[2] = LittleFloat(bounds[i].maxs[2]);
-			bounds[i].xyradius = LittleFloat(bounds[i].xyradius);
+			for (j = 0; j < 3; j++)
+			{
+				bounds[i].mins[j] = LittleFloat(bounds[i].mins[j]);
+				if (mod->mins[j] > bounds[i].mins[j])
+					mod->mins[j] = bounds[i].mins[j];
+				
+				bounds[i].maxs[j] = LittleFloat(bounds[i].maxs[j]);
+				if (mod->maxs[j] < bounds[i].maxs[j])
+					mod->maxs[j] = bounds[i].maxs[j];
+			}
+			
 			bounds[i].radius = LittleFloat(bounds[i].radius);
-
-			if (mod->mins[0] > bounds[i].mins[0]) mod->mins[0] = bounds[i].mins[0];
-			if (mod->mins[1] > bounds[i].mins[1]) mod->mins[1] = bounds[i].mins[1];
-			if (mod->mins[2] > bounds[i].mins[2]) mod->mins[2] = bounds[i].mins[2];
-			if (mod->maxs[0] < bounds[i].maxs[0]) mod->maxs[0] = bounds[i].maxs[0];
-			if (mod->maxs[1] < bounds[i].maxs[1]) mod->maxs[1] = bounds[i].maxs[1];
-			if (mod->maxs[2] < bounds[i].maxs[2]) mod->maxs[2] = bounds[i].maxs[2];
-
-			if (bounds[i].xyradius > xyradius)
-				xyradius = bounds[i].xyradius;
 			if (bounds[i].radius > radius)
 				radius = bounds[i].radius;
 		}
@@ -753,20 +657,11 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 		VectorCopy( tmp, mod->bbox[i] );
 	}
 
-	// load triangle data
-	inelements = (const int *) (pbase + header->ofs_triangles);
+	vtriangles = (int *) (pbase + header->ofs_triangles);
 
-	mod->tris = (iqmtriangle_t*)Hunk_Alloc(header->num_triangles * sizeof(iqmtriangle_t));
-
-	for (i = 0;i < (int)header->num_triangles;i++)
-	{
-		mod->tris[i].vertex[0] = LittleLong(inelements[0]);
-		mod->tris[i].vertex[1] = LittleLong(inelements[1]);
-		mod->tris[i].vertex[2] = LittleLong(inelements[2]);
-		inelements += 3;
-	}
-
-	//load triangle neighbors
+	// load triangle neighbors
+	// TODO: we can remove this when shadow volumes are gone, and simply not
+	// load this data from the file.
 	if (header->ofs_neighbors)
 	{
 		inelements = (const int *) (pbase + header->ofs_neighbors);
@@ -782,20 +677,7 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 		}
 	}
 
-	// load vertex data
-	IQM_LoadVertexArrays(mod, vposition, vnormal, vtangent);
-
-	// load texture coodinates
-    mod->st = (fstvert_t*)Hunk_Alloc (header->num_vertexes * sizeof(fstvert_t));
-	//mod->blendweights = (float *)Hunk_Alloc(header->num_vertexes * 4 * sizeof(float));
-
-	for (i = 0;i < (int)header->num_vertexes;i++)
-	{
-		mod->st[i].s = LittleFloat(vtexcoord[0]);
-		mod->st[i].t = LittleFloat(vtexcoord[1]);
-
-		vtexcoord+=2;
-	}
+	IQM_ByteswapVertexArrays(mod, vposition, vnormal, vtangent, vtexcoord, vtriangles);
 
 	/*
 	 * get skin pathname from <model>.skin file and initialize skin
@@ -842,887 +724,31 @@ qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer)
 	//free temp non hunk mem
 	if(inversebaseframe)
 		free(inversebaseframe);
+	
+	// load the VBO data
 
+	IQM_LoadVBO (mod, vposition, vnormal, vtangent, vtexcoord, vtriangles);
+	
 	return true;
 }
 
-void IQM_AnimateFrame(float curframe, int nextframe)
+float IQM_SelectFrame (void)
 {
-	int i, j;
-
-    int frame1 = (int)floor(curframe),
-        frame2 = nextframe;
-    float frameoffset = curframe - frame1;
-	frame1 %= currentmodel->num_poses;
-	frame2 %= currentmodel->num_poses;
-
-	{
-		matrix3x4_t *mat1 = &currentmodel->frames[frame1 * currentmodel->num_joints],
-			*mat2 = &currentmodel->frames[frame2 * currentmodel->num_joints];
-
-		// Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
-		// Concatenate the result with the inverse of the base pose.
-		// You would normally do animation blending and inter-frame blending here in a 3D engine.
-
-		for(i = 0; i < currentmodel->num_joints; i++)
-		{
-			matrix3x4_t mat, rmat, temp;
-			vec3_t rot;
-			Matrix3x4_Scale(&mat, mat1[i], 1-frameoffset);
-			Matrix3x4_Scale(&temp, mat2[i], frameoffset);
-
-			Matrix3x4_Add(&mat, mat, temp);
-
-			if(currentmodel->version == 1)
-			{
-				if(currentmodel->joints[i].parent >= 0)
-					Matrix3x4_Multiply(&currentmodel->outframe[i], currentmodel->outframe[currentmodel->joints[i].parent], mat);
-				else
-					Matrix3x4_Copy(&currentmodel->outframe[i], mat);
-			}
-			else
-			{
-				if(currentmodel->joints2[i].parent >= 0)
-					Matrix3x4_Multiply(&currentmodel->outframe[i], currentmodel->outframe[currentmodel->joints2[i].parent], mat);
-				else
-					Matrix3x4_Copy(&currentmodel->outframe[i], mat);
-			}
-
-			//bend the model at the waist for player pitch
-			if(currentmodel->version == 1)
-			{
-				if(!strcmp(&currentmodel->jointname[currentmodel->joints[i].name], "Spine")||
-					!strcmp(&currentmodel->jointname[currentmodel->joints[i].name], "Spine.001"))
-				{
-					vec3_t basePosition, oldPosition, newPosition;
-					VectorSet(rot, 0, 1, 0); //remember .iqm's are 90 degrees rotated from reality, so this is the pitch axis
-					Matrix3x4GenRotate(&rmat, modelpitch, rot);
-
-					// concatenate the rotation with the bone
-					Matrix3x4_Multiply(&temp, rmat, currentmodel->outframe[i]);
-
-					// get the position of the bone in the base frame
-					VectorSet(basePosition, currentmodel->baseframe[i].a[3], currentmodel->baseframe[i].b[3], currentmodel->baseframe[i].c[3]);
-
-					// add in the correct old bone position and subtract off the wrong new bone position to get the correct rotation pivot
-					VectorSet(oldPosition,  DotProduct(basePosition, currentmodel->outframe[i].a) + currentmodel->outframe[i].a[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].b) + currentmodel->outframe[i].b[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].c) + currentmodel->outframe[i].c[3]);
-
-					VectorSet(newPosition, DotProduct(basePosition, temp.a) + temp.a[3],
-	   					 DotProduct(basePosition, temp.b) + temp.b[3],
-						 DotProduct(basePosition, temp.c) + temp.c[3]);
-
-					temp.a[3] += oldPosition[0] - newPosition[0];
-					temp.b[3] += oldPosition[1] - newPosition[1];
-					temp.c[3] += oldPosition[2] - newPosition[2];
-
-					// replace the old matrix with the rotated one
-					Matrix3x4_Copy(&currentmodel->outframe[i], temp);
-				}
-				//now rotate the legs back
-				if(!strcmp(&currentmodel->jointname[currentmodel->joints[i].name], "hip.l")||
-					!strcmp(&currentmodel->jointname[currentmodel->joints[i].name], "hip.r"))
-				{
-					vec3_t basePosition, oldPosition, newPosition;
-					VectorSet(rot, 0, 1, 0);
-					Matrix3x4GenRotate(&rmat, -modelpitch, rot);
-
-					// concatenate the rotation with the bone
-					Matrix3x4_Multiply(&temp, rmat, currentmodel->outframe[i]);
-
-					// get the position of the bone in the base frame
-					VectorSet(basePosition, currentmodel->baseframe[i].a[3], currentmodel->baseframe[i].b[3], currentmodel->baseframe[i].c[3]);
-
-					// add in the correct old bone position and subtract off the wrong new bone position to get the correct rotation pivot
-					VectorSet(oldPosition,  DotProduct(basePosition, currentmodel->outframe[i].a) + currentmodel->outframe[i].a[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].b) + currentmodel->outframe[i].b[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].c) + currentmodel->outframe[i].c[3]);
-
-					VectorSet(newPosition, DotProduct(basePosition, temp.a) + temp.a[3],
-	   					 DotProduct(basePosition, temp.b) + temp.b[3],
-						 DotProduct(basePosition, temp.c) + temp.c[3]);
-
-					temp.a[3] += oldPosition[0] - newPosition[0];
-					temp.b[3] += oldPosition[1] - newPosition[1];
-					temp.c[3] += oldPosition[2] - newPosition[2];
-
-					// replace the old matrix with the rotated one
-					Matrix3x4_Copy(&currentmodel->outframe[i], temp);
-				}
-			}
-			else
-			{
-				if(!strcmp(&currentmodel->jointname[currentmodel->joints2[i].name], "Spine")||
-				!strcmp(&currentmodel->jointname[currentmodel->joints2[i].name], "Spine.001"))
-				{
-					vec3_t basePosition, oldPosition, newPosition;
-					VectorSet(rot, 0, 1, 0); //remember .iqm's are 90 degrees rotated from reality, so this is the pitch axis
-					Matrix3x4GenRotate(&rmat, modelpitch, rot);
-
-					// concatenate the rotation with the bone
-					Matrix3x4_Multiply(&temp, rmat, currentmodel->outframe[i]);
-
-					// get the position of the bone in the base frame
-					VectorSet(basePosition, currentmodel->baseframe[i].a[3], currentmodel->baseframe[i].b[3], currentmodel->baseframe[i].c[3]);
-
-					// add in the correct old bone position and subtract off the wrong new bone position to get the correct rotation pivot
-					VectorSet(oldPosition,  DotProduct(basePosition, currentmodel->outframe[i].a) + currentmodel->outframe[i].a[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].b) + currentmodel->outframe[i].b[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].c) + currentmodel->outframe[i].c[3]);
-
-					VectorSet(newPosition, DotProduct(basePosition, temp.a) + temp.a[3],
-	   					 DotProduct(basePosition, temp.b) + temp.b[3],
-						 DotProduct(basePosition, temp.c) + temp.c[3]);
-
-					temp.a[3] += oldPosition[0] - newPosition[0];
-					temp.b[3] += oldPosition[1] - newPosition[1];
-					temp.c[3] += oldPosition[2] - newPosition[2];
-
-					// replace the old matrix with the rotated one
-					Matrix3x4_Copy(&currentmodel->outframe[i], temp);
-				}
-				//now rotate the legs back
-				if(!strcmp(&currentmodel->jointname[currentmodel->joints2[i].name], "hip.l")||
-					!strcmp(&currentmodel->jointname[currentmodel->joints2[i].name], "hip.r"))
-				{
-					vec3_t basePosition, oldPosition, newPosition;
-					VectorSet(rot, 0, 1, 0);
-					Matrix3x4GenRotate(&rmat, -modelpitch, rot);
-
-					// concatenate the rotation with the bone
-					Matrix3x4_Multiply(&temp, rmat, currentmodel->outframe[i]);
-
-					// get the position of the bone in the base frame
-					VectorSet(basePosition, currentmodel->baseframe[i].a[3], currentmodel->baseframe[i].b[3], currentmodel->baseframe[i].c[3]);
-
-					// add in the correct old bone position and subtract off the wrong new bone position to get the correct rotation pivot
-					VectorSet(oldPosition,  DotProduct(basePosition, currentmodel->outframe[i].a) + currentmodel->outframe[i].a[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].b) + currentmodel->outframe[i].b[3],
-						 DotProduct(basePosition, currentmodel->outframe[i].c) + currentmodel->outframe[i].c[3]);
-
-					VectorSet(newPosition, DotProduct(basePosition, temp.a) + temp.a[3],
-	   					 DotProduct(basePosition, temp.b) + temp.b[3],
-						 DotProduct(basePosition, temp.c) + temp.c[3]);
-
-					temp.a[3] += oldPosition[0] - newPosition[0];
-					temp.b[3] += oldPosition[1] - newPosition[1];
-					temp.c[3] += oldPosition[2] - newPosition[2];
-
-					// replace the old matrix with the rotated one
-					Matrix3x4_Copy(&currentmodel->outframe[i], temp);
-				}
-			}
-		}
-	}
-
-	// The actual vertex generation based on the matrixes follows...
-	{
-		const mvertex_t *srcpos = (const mvertex_t *)currentmodel->vertexes;
-		const mnormal_t *srcnorm = (const mnormal_t *)currentmodel->normal;
-		const mtangent_t *srctan = (const mtangent_t *)currentmodel->tangent;
-				
-		mvertex_t *dstpos = (mvertex_t *)currentmodel->animatevertexes;
-		mnormal_t *dstnorm = (mnormal_t *)currentmodel->animatenormal;
-		mtangent_t *dsttan = (mtangent_t *)currentmodel->animatetangent;
-
-		const unsigned char *index = currentmodel->blendindexes;
-
-		const unsigned char *weight = currentmodel->blendweights;
-
-		//we need to skip this vbo check if not using a shader - since the animation is done in the shader
-		has_vbo = false;
-		//a lot of conditions need to be enabled in order to use GPU animation
-		if (use_vbo && (gl_state.vbo && gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer) &&
-			(r_shaders->integer || ( currententity->flags & ( RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE | RF_SHELL_DOUBLE | RF_SHELL_HALF_DAM))))
-		{
-			vbo_xyz = R_VCFindCache(VBO_STORE_XYZ, currentmodel);
-			vbo_st = R_VCFindCache(VBO_STORE_ST, currentmodel);
-			vbo_normals = R_VCFindCache(VBO_STORE_NORMAL, currentmodel);
-			vbo_tangents = R_VCFindCache(VBO_STORE_TANGENT, currentmodel);
-			vbo_indices = R_VCFindCache(VBO_STORE_INDICES, currentmodel);
-			if(vbo_xyz && vbo_st && vbo_normals && vbo_tangents && vbo_indices)
-			{
-				has_vbo = true;
-				goto skipLoad;
-			}
-			else
-			{
-				R_VCLoadData(VBO_STATIC, currentmodel->numvertexes*sizeof(vec3_t), currentmodel->vertexes, VBO_STORE_XYZ, currentmodel);
-				R_VCLoadData(VBO_STATIC, currentmodel->numvertexes*sizeof(vec2_t), currentmodel->st, VBO_STORE_ST, currentmodel);
-				R_VCLoadData(VBO_STATIC, currentmodel->numvertexes*sizeof(vec3_t), currentmodel->normal, VBO_STORE_NORMAL, currentmodel);
-				R_VCLoadData(VBO_STATIC, currentmodel->numvertexes*sizeof(vec4_t), currentmodel->tangent, VBO_STORE_TANGENT, currentmodel);
-				R_VCLoadData(VBO_STATIC, currentmodel->num_triangles*3*sizeof(unsigned int), currentmodel->tris, VBO_STORE_INDICES, currentmodel);
-			}
-		}					
-
-		for(i = 0; i < currentmodel->numvertexes; i++)
-		{
-			matrix3x4_t mat;
-
-			// Blend matrixes for this vertex according to its blend weights.
-			// the first index/weight is always present, and the weights are
-			// guaranteed to add up to 255. So if only the first weight is
-			// presented, you could optimize this case by skipping any weight
-			// multiplies and intermediate storage of a blended matrix.
-			// There are only at most 4 weights per vertex, and they are in
-			// sorted order from highest weight to lowest weight. Weights with
-			// 0 values, which are always at the end, are unused.
-
-			Matrix3x4_Scale(&mat, currentmodel->outframe[index[0]], weight[0]/255.0f);
-
-			for(j = 1; j < 4 && weight[j]; j++)
-			{
-				Matrix3x4_ScaleAdd (&mat, &currentmodel->outframe[index[j]], weight[j]/255.0f, &mat);
-			}
-
-			// Transform attributes by the blended matrix.
-			// Position uses the full 3x4 transformation matrix.
-			// Normals and tangents only use the 3x3 rotation part
-			// of the transformation matrix.
-
-			Matrix3x4_Transform(dstpos, mat, *srcpos);
-
-			// Note that if the matrix includes non-uniform scaling, normal vectors
-			// must be transformed by the inverse-transpose of the matrix to have the
-			// correct relative scale. Note that invert(mat) = adjoint(mat)/determinant(mat),
-			// and since the absolute scale is not important for a vector that will later
-			// be renormalized, the adjoint-transpose matrix will work fine, which can be
-			// cheaply generated by 3 cross-products.
-			//
-			// If you don't need to use joint scaling in your models, you can simply use the
-			// upper 3x3 part of the position matrix instead of the adjoint-transpose shown
-			// here.
-
-			Matrix3x4_TransformNormal(dstnorm, mat, *srcnorm);
-
-			// Note that input tangent data has 4 coordinates,
-			// so only transform the first 3 as the tangent vector.
-
-			Matrix3x4_TransformTangent(dsttan, mat, *srctan);
-
-			srcpos++;
-			srcnorm++;
-			srctan++;
-			dstpos++;
-			dstnorm++;
-			dsttan++;
-
-			index += 4;
-			weight += 4;
-		}		
-skipLoad: ;
-	}
-}
-
-void IQM_AnimateRagdoll(int RagDollID, int shellEffect)
-{
-	//we only deal with one frame
-
-	//animate using the rotations from our corresponding ODE objects.
-	int i, j;
-	{
-		for(i = 0; i < RagDoll[RagDollID].ragDollMesh->num_joints; i++)
-		{
-			matrix3x4_t mat, rmat;
-            int parent;
-
-            for(j = 0; j < RagDollBindsCount; j++)
-            {
-				if(RagDoll[RagDollID].ragDollMesh->version == 1)
-				{
-					if(!strcmp(&RagDoll[RagDollID].ragDollMesh->jointname[RagDoll[RagDollID].ragDollMesh->joints[i].name], RagDollBinds[j].name))
-					{
-						int object = RagDollBinds[j].object;
-						const dReal *odeRot = dBodyGetRotation(RagDoll[RagDollID].RagDollObject[object].body);
-						const dReal *odePos = dBodyGetPosition(RagDoll[RagDollID].RagDollObject[object].body);
-						Matrix3x4GenFromODE(&rmat, odeRot, odePos);
-						Matrix3x4_Multiply(&RagDoll[RagDollID].ragDollMesh->outframe[i], rmat, RagDoll[RagDollID].RagDollObject[object].initmat);
-						goto nextjoint;
-					}
-				}
-				else
-				{
-					if(!strcmp(&RagDoll[RagDollID].ragDollMesh->jointname[RagDoll[RagDollID].ragDollMesh->joints2[i].name], RagDollBinds[j].name))
-					{
-						int object = RagDollBinds[j].object;
-						const dReal *odeRot = dBodyGetRotation(RagDoll[RagDollID].RagDollObject[object].body);
-						const dReal *odePos = dBodyGetPosition(RagDoll[RagDollID].RagDollObject[object].body);
-						Matrix3x4GenFromODE(&rmat, odeRot, odePos);
-						Matrix3x4_Multiply(&RagDoll[RagDollID].ragDollMesh->outframe[i], rmat, RagDoll[RagDollID].RagDollObject[object].initmat);
-						goto nextjoint;
-					}
-				}
-			}
-
-			if(RagDoll[RagDollID].ragDollMesh->version == 1)
-				parent = RagDoll[RagDollID].ragDollMesh->joints[i].parent;
-			else
-				parent = RagDoll[RagDollID].ragDollMesh->joints2[i].parent;
-            if(parent >= 0)
-            {
-                Matrix3x4_Invert(&mat, RagDoll[RagDollID].initframe[parent]);
-                Matrix3x4_Multiply(&mat, mat, RagDoll[RagDollID].initframe[i]);
-                Matrix3x4_Multiply(&RagDoll[RagDollID].ragDollMesh->outframe[i], RagDoll[RagDollID].ragDollMesh->outframe[parent], mat);
-            }
-            else
-                memset(&RagDoll[RagDollID].ragDollMesh->outframe[i], 0, sizeof(matrix3x4_t));
-
-        nextjoint:;
-		}
-	}
-
-	{
-		const mvertex_t *srcpos = (const mvertex_t *)RagDoll[RagDollID].ragDollMesh->vertexes;
-		const mnormal_t *srcnorm = (const mnormal_t *)RagDoll[RagDollID].ragDollMesh->normal;
-		const mtangent_t *srctan = (const mtangent_t *)RagDoll[RagDollID].ragDollMesh->tangent;
-
-		mvertex_t *dstpos = (mvertex_t *)RagDoll[RagDollID].ragDollMesh->animatevertexes;
-		mnormal_t *dstnorm = (mnormal_t *)RagDoll[RagDollID].ragDollMesh->animatenormal;
-		mtangent_t *dsttan = (mtangent_t *)RagDoll[RagDollID].ragDollMesh->animatetangent;
-
-		const unsigned char *index = RagDoll[RagDollID].ragDollMesh->blendindexes;
-		const unsigned char *weight = RagDoll[RagDollID].ragDollMesh->blendweights;
-
-		//we need to skip this vbo check if not using a shader - since the animation is done in the shader (might want to check for normalmap stage)
-		has_vbo = false;
-		//a lot of conditions need to be enabled in order to use GPU animation
-
-		if (use_vbo && (gl_state.vbo && RagDoll[RagDollID].script && gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer) &&
-			(r_shaders->integer || shellEffect))
-		{
-			vbo_xyz = R_VCFindCache(VBO_STORE_XYZ, RagDoll[RagDollID].ragDollMesh);
-			vbo_st = R_VCFindCache(VBO_STORE_ST, RagDoll[RagDollID].ragDollMesh);
-			vbo_normals = R_VCFindCache(VBO_STORE_NORMAL, RagDoll[RagDollID].ragDollMesh);
-			vbo_tangents = R_VCFindCache(VBO_STORE_TANGENT, RagDoll[RagDollID].ragDollMesh);
-			vbo_indices = R_VCFindCache(VBO_STORE_INDICES, RagDoll[RagDollID].ragDollMesh);
-			if(vbo_xyz && vbo_st && vbo_normals && vbo_tangents && vbo_indices)
-			{
-				has_vbo = true;
-				goto skipLoad;
-			}
-			else
-			{
-				R_VCLoadData(VBO_STATIC,  RagDoll[RagDollID].ragDollMesh->numvertexes*sizeof(vec3_t),  RagDoll[RagDollID].ragDollMesh->vertexes, VBO_STORE_XYZ,  RagDoll[RagDollID].ragDollMesh);
-				R_VCLoadData(VBO_STATIC,  RagDoll[RagDollID].ragDollMesh->numvertexes*sizeof(vec2_t),  RagDoll[RagDollID].ragDollMesh->st, VBO_STORE_ST,  RagDoll[RagDollID].ragDollMesh);
-				R_VCLoadData(VBO_STATIC,  RagDoll[RagDollID].ragDollMesh->numvertexes*sizeof(vec3_t),  RagDoll[RagDollID].ragDollMesh->normal, VBO_STORE_NORMAL,  RagDoll[RagDollID].ragDollMesh);
-				R_VCLoadData(VBO_STATIC,  RagDoll[RagDollID].ragDollMesh->numvertexes*sizeof(vec4_t),  RagDoll[RagDollID].ragDollMesh->tangent, VBO_STORE_TANGENT,  RagDoll[RagDollID].ragDollMesh);
-				R_VCLoadData(VBO_STATIC,  RagDoll[RagDollID].ragDollMesh->num_triangles*3*sizeof(unsigned int),  RagDoll[RagDollID].ragDollMesh->tris, VBO_STORE_INDICES,  RagDoll[RagDollID].ragDollMesh);
-			}
-		}		
-
-		for(i = 0; i < RagDoll[RagDollID].ragDollMesh->numvertexes; i++)
-		{
-			matrix3x4_t mat;
-
-			Matrix3x4_Scale(&mat, RagDoll[RagDollID].ragDollMesh->outframe[index[0]], weight[0]/255.0f);
-
-			for(j = 1; j < 4 && weight[j]; j++)
-			{
-				Matrix3x4_ScaleAdd (&mat, &RagDoll[RagDollID].ragDollMesh->outframe[index[j]], weight[j]/255.0f, &mat);
-			}
-
-			Matrix3x4_Transform(dstpos, mat, *srcpos);
-
-			Matrix3x4_TransformNormal(dstnorm, mat, *srcnorm);
-
-			Matrix3x4_TransformTangent(dsttan, mat, *srctan);
-
-			srcpos++;
-			srcnorm++;
-			srctan++;
-			dstpos++;
-			dstnorm++;
-			dsttan++;
-
-			index += 4;
-			weight += 4;
-		}
-skipLoad: ;
-	}
-}
-
-void IQM_Vlight (vec3_t baselight, mnormal_t *normal, vec3_t angles, vec3_t lightOut)
-{
-	float l;
-	float lscale;
-
-	VectorScale(baselight, gl_modulate->value, lightOut);
-
-	//probably will remove this - maybe we can get a faster algorithm and redo one day
-	//if(!gl_vlights->integer)
-		return;
-
-	lscale = 3.0;
-
-    l = lscale * VLight_GetLightValue (normal->dir, lightPosition, angles[PITCH], angles[YAW]);
-
-    VectorScale(baselight, l, lightOut);
-}
-
-void R_Mesh_SetupShell (int shell_skinnum, qboolean ragdoll, qboolean using_varray, vec3_t lightcolor);
-void R_Mesh_SetupGLSL (int skinnum, rscript_t *rs, vec3_t lightcolor);
-
-inline void IQM_DrawVBO (qboolean tangents)
-{
-	qglEnableClientState( GL_VERTEX_ARRAY );
-	GL_BindVBO(vbo_xyz);
-	qglVertexPointer(3, GL_FLOAT, 0, 0);
-
-	qglEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	GL_BindVBO(vbo_st);
-	qglTexCoordPointer(2, GL_FLOAT, 0, 0);
-
-	KillFlags |= KILL_NORMAL_POINTER;
-	qglEnableClientState( GL_NORMAL_ARRAY );
-	GL_BindVBO(vbo_normals);
-	qglNormalPointer(GL_FLOAT, 0, 0);
-
-	if (tangents)
-	{
-		glEnableVertexAttribArrayARB (1);
-		GL_BindVBO(vbo_tangents);
-		glVertexAttribPointerARB(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	}
-		
-	GL_BindVBO(NULL);
-
-	GL_BindIBO(vbo_indices);								
-
-	glEnableVertexAttribArrayARB(6);
-	glEnableVertexAttribArrayARB(7);
-	glVertexAttribPointerARB(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(unsigned char)*4, currentmodel->blendweights);
-	glVertexAttribPointerARB(7, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(unsigned char)*4, currentmodel->blendindexes); 				
-
-	qglDrawElements(GL_TRIANGLES, currentmodel->num_triangles*3, GL_UNSIGNED_INT, 0);	
-
-	GL_BindIBO(NULL);
-}
-
-void IQM_DrawFrame(int skinnum, qboolean ragdoll, float shellAlpha)
-{
-	int		i, j;
-	vec3_t	vectors[3];
-	rscript_t *rs = NULL;
-	float	shellscale;
-	float	alpha, basealpha;
-	vec3_t	lightcolor;
-	int		index_xyz, index_st;
-	int		va = 0;
-	qboolean mirror = false;
-	qboolean glass = false;
-
-	if (r_shaders->integer)
-		rs = currententity->script;
+	float		time;
 	
-	VectorCopy(shadelight, lightcolor);
-	for (i=0;i<model_dlights_num;i++)
-		VectorAdd(lightcolor, model_dlights[i].color, lightcolor);
-	VectorNormalize(lightcolor);
-
-	if (currententity->flags & RF_TRANSLUCENT)
-	{
-		alpha = currententity->alpha;
-		if (!(r_newrefdef.rdflags & RDF_NOWORLDMODEL))
-		{
-			if(gl_mirror->integer)
-				mirror = true;
-			else
-				glass = true;
-		}
-		else
-			glass = true;
-	}
-	else
-		alpha = basealpha = 1.0;
-
-	AngleVectors (currententity->angles, vectors[0], vectors[1], vectors[2]);
-
-	//render the model
-
-	if(( currententity->flags & ( RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE | RF_SHELL_DOUBLE | RF_SHELL_HALF_DAM) ) )
-	{
-		qglEnable (GL_BLEND);
-		qglBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-		R_Mesh_SetupShell (r_shelltexture2->texnum, ragdoll, !has_vbo, lightcolor);
-
-		if (ragdoll)
-			shellscale = 1.6;
-		else if((currententity->flags & (RF_WEAPONMODEL | RF_SHELL_GREEN)) || (gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer))
-			shellscale = 0.4;
-		else
-			shellscale = 1.6;
-
-		if(!has_vbo)
-		{
-			if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
-			{
-				glUniform1iARB(g_location_useGPUanim, 0);
-			}
-
-			for (i=0; i<currentmodel->num_triangles; i++)
-			{
-				for (j=0; j<3; j++)
-				{
-					index_xyz = index_st = currentmodel->tris[i].vertex[j];
-
-					VArray[0] = currentmodel->animatevertexes[index_xyz].position[0] + currentmodel->animatenormal[index_xyz].dir[0]*shellscale;
-					VArray[1] = currentmodel->animatevertexes[index_xyz].position[1] + currentmodel->animatenormal[index_xyz].dir[1]*shellscale;
-					VArray[2] = currentmodel->animatevertexes[index_xyz].position[2] + currentmodel->animatenormal[index_xyz].dir[2]*shellscale;
-
-					VArray[3] = currentmodel->st[index_st].s;
-					VArray[4] = currentmodel->st[index_st].t;
-
-					VArray[5] = shadelight[0];
-					VArray[6] = shadelight[1];
-					VArray[7] = shadelight[2];
-					
-					// normally fixed at 0.33, decreases gradually for 
-					// ragdolls
-					VArray[8] = shellAlpha; 
-
-					if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
-					{
-						VectorCopy(currentmodel->animatenormal[index_xyz].dir, NormalsArray[va]); //shader needs normal array
-						Vector4Copy(currentmodel->animatetangent[index_xyz].dir, TangentsArray[va]);
-						VArray += VertexSizes[VERT_NORMAL_COLOURED_TEXTURED]; // increment pointer and counter
-					}
-					else
-						VArray += VertexSizes[VERT_COLOURED_TEXTURED]; // increment pointer and counter
-					va++;
-				}
-			}
-
-			R_DrawVarrays(GL_TRIANGLES, 0, va);
-		}		
-		else
-		{			
-			glUniform1iARB(g_location_useGPUanim, 1);			
-
-			glUniformMatrix3x4fvARB( g_location_outframe, currentmodel->num_joints, GL_FALSE, (const GLfloat *) currentmodel->outframe );
-
-			IQM_DrawVBO (true);
-		}
-
-		if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
-		{
-			glUseProgramObjectARB( 0 );
-			GL_EnableMultitexture( false );
-			if (ragdoll)
-				qglDepthMask(true);
-		}
-	}	
-	else if((mirror || glass ) && has_vbo)
-	{
-		//render glass with glsl shader
-		vec3_t lightVec;
-		
-		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER | KILL_TMU2_POINTER | KILL_NORMAL_POINTER);
-
-		qglDepthMask(false);
-
-		R_ModelViewTransform(lightPosition, lightVec);		
-				
-		glUseProgramObjectARB( g_glassprogramObj );
-
-		glUniform3fARB( g_location_gLightPos, lightVec[0], lightVec[1], lightVec[2]);
-	
-		GL_SelectTexture( GL_TEXTURE1);
-		if(mirror)
-		{			
-			GL_Bind (r_mirrortexture->texnum);
-		}
-		else
-		{
-			GL_Bind (r_mirrorspec->texnum);			
-		}
-		glUniform1iARB( g_location_gmirTexture, 1);
-
-		GL_SelectTexture( GL_TEXTURE0);
-		GL_Bind (r_mirrorspec->texnum);
-		glUniform1iARB( g_location_grefTexture, 0);		
-
-		glUniform1iARB( g_location_gFog, map_fog);
-										
-		glUniformMatrix3x4fvARB( g_location_gOutframe, currentmodel->num_joints, GL_FALSE, (const GLfloat *) currentmodel->outframe );
-
-		IQM_DrawVBO (false);
-		
-		glUseProgramObjectARB( 0 );
-	}
-	else if(mirror || glass)
-	{
-		//glass surfaces
-		//base render, no vbo, no shaders	
-
-		qglDepthMask(false);
-
-		if(mirror)
-		{
-			if( !(currententity->flags & RF_WEAPONMODEL))
-			{
-				R_InitVArrays(VERT_COLOURED_MULTI_TEXTURED);
-				GL_EnableMultitexture( true );
-				GL_SelectTexture( GL_TEXTURE0);
-				GL_TexEnv ( GL_COMBINE_EXT );
-				GL_Bind (r_mirrortexture->texnum);
-				qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_REPLACE );
-				qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_RGB_EXT, GL_TEXTURE );
-				GL_SelectTexture( GL_TEXTURE1);
-				GL_TexEnv ( GL_COMBINE_EXT );
-				GL_Bind (r_mirrorspec->texnum);
-				qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_MODULATE );
-				qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_RGB_EXT, GL_TEXTURE );
-				qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE1_RGB_EXT, GL_PREVIOUS_EXT );
-			}
-			else
-			{
-				R_InitVArrays (VERT_COLOURED_TEXTURED);
-				GL_SelectTexture( GL_TEXTURE0);
-				GL_Bind (r_mirrortexture->texnum);
-			}
-		}
-		else
-		{
-			R_InitVArrays (VERT_COLOURED_TEXTURED);
-			GL_SelectTexture( GL_TEXTURE0);
-			GL_Bind (r_reflecttexture->texnum);
-		}
-		
-		for (i=0; i<currentmodel->num_triangles; i++)
-		{
-			for (j=0; j<3; j++)
-			{
-				index_xyz = index_st = currentmodel->tris[i].vertex[j];
-
-				VArray[0] = currentmodel->animatevertexes[index_xyz].position[0];
-				VArray[1] = currentmodel->animatevertexes[index_xyz].position[1];
-				VArray[2] = currentmodel->animatevertexes[index_xyz].position[2];
-
-				if(mirror)
-				{
-					VArray[5] = VArray[3] = -(currentmodel->st[index_st].s - DotProduct (currentmodel->animatenormal[index_xyz].dir, vectors[1]));
-					VArray[6] = VArray[4] = currentmodel->st[index_st].t + DotProduct (currentmodel->animatenormal[index_xyz].dir, vectors[2]);
-				}
-				else
-				{
-					VArray[3] = -(currentmodel->st[index_st].s - DotProduct (currentmodel->animatenormal[index_xyz].dir, vectors[1]));
-					VArray[4] = currentmodel->st[index_st].t + DotProduct (currentmodel->animatenormal[index_xyz].dir, vectors[2]);
-				}
-				
-				IQM_Vlight (shadelight, &currentmodel->animatenormal[index_xyz], currententity->angles, lightcolor);
-
-				if(mirror && !(currententity->flags & RF_WEAPONMODEL) )
-				{
-					VArray[7] = lightcolor[0];
-					VArray[8] = lightcolor[1];
-					VArray[9] = lightcolor[2];
-					VArray[10] = alpha;
-					VArray += VertexSizes[VERT_COLOURED_MULTI_TEXTURED]; // increment pointer and counter
-				}
-				else
-				{
-					VArray[5] = lightcolor[0];
-					VArray[6] = lightcolor[1];
-					VArray[7] = lightcolor[2];
-					VArray[8] = alpha;
-					VArray += VertexSizes[VERT_COLOURED_TEXTURED]; // increment pointer and counter
-				}
-
-				va++;
-			}
-		}
-
-		R_DrawVarrays(GL_TRIANGLES, 0, va);
-
-		if(mirror && !(currententity->flags & RF_WEAPONMODEL))
-			GL_EnableMultitexture( false );
-
-		qglDepthMask(true);
-	}
-	else if(rs && rs->stage->normalmap && gl_normalmaps->integer && gl_glsl_shaders->integer && gl_state.glsl_shaders)
-	{	
-		R_Mesh_SetupGLSL (skinnum, rs, lightcolor);		
-
-		if(!has_vbo)
-		{
-			glUniform1iARB(g_location_useGPUanim, 0);
-
-			R_InitVArrays (VERT_NORMAL_COLOURED_TEXTURED);
-			qglNormalPointer(GL_FLOAT, 0, NormalsArray);
-			glEnableVertexAttribArrayARB (1);
-			glVertexAttribPointerARB(1, 4, GL_FLOAT, GL_FALSE, 0, TangentsArray);
-
-			for (i=0; i<currentmodel->num_triangles; i++)
-			{
-				for (j=0; j<3; j++)
-				{
-					index_xyz = index_st = currentmodel->tris[i].vertex[j];
-
-					VArray[0] = currentmodel->animatevertexes[index_xyz].position[0];
-					VArray[1] = currentmodel->animatevertexes[index_xyz].position[1];
-					VArray[2] = currentmodel->animatevertexes[index_xyz].position[2];
-
-					VArray[3] = currentmodel->st[index_st].s;
-					VArray[4] = currentmodel->st[index_st].t;
-
-					VectorCopy(currentmodel->animatenormal[index_xyz].dir, NormalsArray[va]);
-					Vector4Copy(currentmodel->animatetangent[index_xyz].dir, TangentsArray[va]);
-
-					VArray += VertexSizes[VERT_NORMAL_COLOURED_TEXTURED]; // increment pointer and counter
-					va++;
-				}
-			}
-			
-			R_DrawVarrays(GL_TRIANGLES, 0, va);
-		}
-		else
-		{
-			glUniform1iARB(g_location_useGPUanim, 1);
-
-			glUniformMatrix3x4fvARB( g_location_outframe, currentmodel->num_joints, GL_FALSE, (const GLfloat *) currentmodel->outframe );
-
-			IQM_DrawVBO (true);
-		}
-
-		qglColor4f(1,1,1,1);
-
-		glUseProgramObjectARB( 0 );
-		GL_EnableMultitexture( false );
-	}
-	else
-	{	
-		//base render no shaders
-
-		R_InitVArrays (VERT_COLOURED_TEXTURED);
-
-		GL_SelectTexture( GL_TEXTURE0);
-		GL_Bind (skinnum);
-		
-		for (i=0; i<currentmodel->num_triangles; i++)
-		{
-			for (j=0; j<3; j++)
-			{
-				index_xyz = index_st = currentmodel->tris[i].vertex[j];
-
-				VArray[0] = currentmodel->animatevertexes[index_xyz].position[0];
-				VArray[1] = currentmodel->animatevertexes[index_xyz].position[1];
-				VArray[2] = currentmodel->animatevertexes[index_xyz].position[2];
-
-				VArray[3] = currentmodel->st[index_st].s;
-				VArray[4] = currentmodel->st[index_st].t;
-				
-				IQM_Vlight (shadelight, &currentmodel->animatenormal[index_xyz], currententity->angles, lightcolor);
-
-				VArray[5] = lightcolor[0] > 0.2 ? lightcolor[0] : 0.2;
-				VArray[6] = lightcolor[1] > 0.2 ? lightcolor[1] : 0.2;
-				VArray[7] = lightcolor[2] > 0.2 ? lightcolor[2] : 0.2;
-				VArray[8] = alpha;
-				VArray += VertexSizes[VERT_COLOURED_TEXTURED]; // increment pointer and counter
-				va++;
-			}
-		}
-
-		R_DrawVarrays(GL_TRIANGLES, 0, va);
-	}
-
-	GLSTATE_DISABLE_ALPHATEST
-	GLSTATE_DISABLE_BLEND
-	GLSTATE_DISABLE_TEXGEN
-
-	glDisableVertexAttribArrayARB(1);
-	glDisableVertexAttribArrayARB(6);
-	glDisableVertexAttribArrayARB(7);
-
-	R_KillVArrays ();
-
-	if ( currententity->flags & ( RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE | RF_SHELL_DOUBLE | RF_SHELL_HALF_DAM ) )
-		qglEnable( GL_TEXTURE_2D );
-}
-
-static qboolean IQM_CullModel( void )
-{
-	int i;
-	vec3_t	vectors[3];
-	vec3_t  angles;
-	trace_t r_trace;
-	vec3_t	dist;
-	vec3_t bbox[8];
-
-	if (r_worldmodel )
-	{
-		//occulusion culling - why draw entities we cannot see?
-
-		r_trace = CM_BoxTrace(r_origin, currententity->origin, currentmodel->maxs, currentmodel->mins, r_worldmodel->firstnode, MASK_OPAQUE);
-		if(r_trace.fraction != 1.0)
-			return true;
-	}
-
-	VectorSubtract(r_origin, currententity->origin, dist);
-
-	/*
-	** rotate the bounding box
-	*/
-	VectorCopy( currententity->angles, angles );
-	angles[YAW] = -angles[YAW];
-	AngleVectors( angles, vectors[0], vectors[1], vectors[2] );
-
-	for ( i = 0; i < 8; i++ )
-	{
-		vec3_t tmp;
-
-		VectorCopy( currentmodel->bbox[i], tmp );
-
-		bbox[i][0] = DotProduct( vectors[0], tmp );
-		bbox[i][1] = -DotProduct( vectors[1], tmp );
-		bbox[i][2] = DotProduct( vectors[2], tmp );
-
-		VectorAdd( currententity->origin, bbox[i], bbox[i] );
-	}
-
-	{
-		int p, f, aggregatemask = ~0;
-
-		for ( p = 0; p < 8; p++ )
-		{
-			int mask = 0;
-
-			for ( f = 0; f < 4; f++ )
-			{
-				float dp = DotProduct( frustum[f].normal, bbox[p] );
-
-				if ( ( dp - frustum[f].dist ) < 0 )
-				{
-					mask |= ( 1 << f );
-				}
-			}
-			aggregatemask &= mask;
-		}
-
-		if ( aggregatemask && (VectorLength(dist) > 150)) //so shadows don't blatantly disappear when out of frustom
-		{
-			return true;
-		}
-
-		return false;
-	}
-}
-
-//Can these next two be replaced with some type of animation grouping from the model?
-qboolean IQM_InAnimGroup(int frame, int oldframe)
-{
-	//check if we are in a player anim group that is commonly looping
-	if(frame >= 0 && frame <= 39 && oldframe >=0 && oldframe <= 39)
-		return true; //standing, or 40 frame static mesh
-	else if(frame >= 40 && frame <=45 && oldframe >= 40 && oldframe <=45)
-		return true; //running
-	else if(frame >= 66 && frame <= 71 && oldframe >= 66 && oldframe <= 71)
-		return true; //jumping
-	else if(frame >= 0 && frame <= 23 && oldframe >= 0 && oldframe <= 23)
-		return true; //static meshes are 24 frames
-	else
-		return false;
+	//frame interpolation
+	time = (Sys_Milliseconds() - currententity->frametime) / 100;
+	if(time > 1.0)
+		time = 1.0;
+
+	if((currententity->frame == currententity->oldframe ) && !IQM_InAnimGroup(currententity->frame, currententity->oldframe))
+		time = 0;
+
+	//Check for stopped death anims
+	if(currententity->frame == 257 || currententity->frame == 237 || currententity->frame == 219)
+		time = 0;
+
+	return currententity->frame + time;
 }
 
 int IQM_NextFrame(int frame)
@@ -1788,363 +814,242 @@ int IQM_NextFrame(int frame)
 	}
 	return outframe;
 }
-/*
-=================
-R_DrawINTERQUAKEMODEL
-=================
-*/
 
-void R_DrawINTERQUAKEMODEL ( void )
+static inline void IQM_Bend (matrix3x4_t *temp, matrix3x4_t rmat, int jointnum)
 {
-	int			i;
-	image_t		*skin;
-	float		frame, time;
+	vec3_t		basePosition, oldPosition, newPosition;
+	matrix3x4_t	*basejoint, *outjoint;
+	
+	basejoint = &currentmodel->baseframe[jointnum];
+	outjoint = &currentmodel->outframe[jointnum];
+	
+	// concatenate the rotation with the bone
+	Matrix3x4_Multiply(temp, rmat, *outjoint);
 
-	if((r_newrefdef.rdflags & RDF_NOWORLDMODEL ) && !(currententity->flags & RF_MENUMODEL))
-		return;
+	// get the position of the bone in the base frame
+	VectorSet(basePosition, basejoint->a[3], basejoint->b[3], basejoint->c[3]);
 
-	if ((currententity->flags & RF_WEAPONMODEL) && r_lefthand->integer == 2)
-		return;
+	// add in the correct old bone position and subtract off the wrong new bone position to get the correct rotation pivot
+	VectorSet(oldPosition,  DotProduct(basePosition, outjoint->a) + outjoint->a[3],
+		 DotProduct(basePosition, outjoint->b) + outjoint->b[3],
+		 DotProduct(basePosition, outjoint->c) + outjoint->c[3]);
 
-	//do culling
-	if ( IQM_CullModel() )
-		return;
+	VectorSet(newPosition, DotProduct(basePosition, temp->a) + temp->a[3],
+		 DotProduct(basePosition, temp->b) + temp->b[3],
+		 DotProduct(basePosition, temp->c) + temp->c[3]);
 
+	temp->a[3] += oldPosition[0] - newPosition[0];
+	temp->b[3] += oldPosition[1] - newPosition[1];
+	temp->c[3] += oldPosition[2] - newPosition[2];
+
+	// replace the old matrix with the rotated one
+	Matrix3x4_Copy(outjoint, *temp);
+}
+
+void IQM_AnimateFrame (void)
+{
+	int i;
+	int frame1, frame2;
+	float frameoffset;
+	float curframe;
+	int nextframe;
+	float modelpitch;
+	float modelroll;
+	
+	modelpitch = DEG2RAD(currententity->angles[PITCH]); 
+	modelroll = DEG2RAD(currententity->angles[ROLL]);
+	
+	curframe = IQM_SelectFrame ();
+	nextframe = IQM_NextFrame (currententity->frame);
+
+	frame1 = (int)floor(curframe);
+	frame2 = nextframe;
+	frameoffset = curframe - frame1;
+	frame1 %= currentmodel->num_poses;
+	frame2 %= currentmodel->num_poses;
+
+	{
+		matrix3x4_t *mat1 = &currentmodel->frames[frame1 * currentmodel->num_joints],
+			*mat2 = &currentmodel->frames[frame2 * currentmodel->num_joints];
+
+		// Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
+		// Concatenate the result with the inverse of the base pose.
+		// You would normally do animation blending and inter-frame blending here in a 3D engine.
+
+		for(i = 0; i < currentmodel->num_joints; i++)
+		{
+			const char *currentjoint_name;
+			signed int currentjoint_parent;
+			matrix3x4_t mat, rmat, temp;
+			vec3_t rot;
+			Matrix3x4_Scale(&mat, mat1[i], 1-frameoffset);
+			Matrix3x4_Scale(&temp, mat2[i], frameoffset);
+
+			Matrix3x4_Add(&mat, mat, temp);
+			
+			currentjoint_name = &currentmodel->jointname[currentmodel->joints[i].name];
+			currentjoint_parent = currentmodel->joints[i].parent;
+
+			if(currentjoint_parent >= 0)
+				Matrix3x4_Multiply(&currentmodel->outframe[i], currentmodel->outframe[currentjoint_parent], mat);
+			else
+				Matrix3x4_Copy(&currentmodel->outframe[i], mat);
+
+			//bend the model at the waist for player pitch
+			if(!strcmp(currentjoint_name, "Spine") || !strcmp(currentjoint_name, "Spine.001"))
+			{
+				VectorSet(rot, 0, 1, 0); //remember .iqm's are 90 degrees rotated from reality, so this is the pitch axis
+				Matrix3x4GenRotate(&rmat, modelpitch, rot);
+				
+				IQM_Bend (&temp, rmat, i);
+			}
+			//now rotate the legs back
+			if(!strcmp(currentjoint_name, "hip.l") || !strcmp(currentjoint_name, "hip.r"))
+			{
+				VectorSet(rot, 0, 1, 0);
+				Matrix3x4GenRotate(&rmat, -modelpitch, rot);
+				
+				IQM_Bend (&temp, rmat, i);
+			}
+
+			//bend the model at the waist for player roll
+			if(!strcmp(currentjoint_name, "Spine") || !strcmp(currentjoint_name, "Spine.001"))
+			{
+				VectorSet(rot, 1, 0, 0); //remember .iqm's are 90 degrees rotated from reality, so this is the pitch axis
+				Matrix3x4GenRotate(&rmat, modelroll, rot);
+				
+				IQM_Bend (&temp, rmat, i);
+			}
+			//now rotate the legs back
+			if(!strcmp(currentjoint_name, "hip.l") || !strcmp(currentjoint_name, "hip.r"))
+			{
+				VectorSet(rot, 1, 0, 0);
+				Matrix3x4GenRotate(&rmat, -modelroll, rot);
+				
+				IQM_Bend (&temp, rmat, i);
+			}
+		}
+	}
+}
+
+void IQM_AnimateRagdoll(int RagDollID)
+{
+	//we only deal with one frame
+
+	//animate using the rotations from our corresponding ODE objects.
+	int i, j;
+	{
+		for(i = 0; i < RagDoll[RagDollID].ragDollMesh->num_joints; i++)
+		{
+			matrix3x4_t mat, rmat;
+            int parent;
+
+            for(j = 0; j < RagDollBindsCount; j++)
+            {
+				if(!strcmp(&RagDoll[RagDollID].ragDollMesh->jointname[RagDoll[RagDollID].ragDollMesh->joints[i].name], RagDollBinds[j].name))
+				{
+					int object = RagDollBinds[j].object;
+					const dReal *odeRot = dBodyGetRotation(RagDoll[RagDollID].RagDollObject[object].body);
+					const dReal *odePos = dBodyGetPosition(RagDoll[RagDollID].RagDollObject[object].body);
+					Matrix3x4GenFromODE(&rmat, odeRot, odePos);
+					Matrix3x4_Multiply(&RagDoll[RagDollID].ragDollMesh->outframe[i], rmat, RagDoll[RagDollID].RagDollObject[object].initmat);
+					goto nextjoint;
+				}
+			}
+
+			parent = RagDoll[RagDollID].ragDollMesh->joints[i].parent;
+            if(parent >= 0)
+            {
+                Matrix3x4_Invert(&mat, RagDoll[RagDollID].initframe[parent]);
+                Matrix3x4_Multiply(&mat, mat, RagDoll[RagDollID].initframe[i]);
+                Matrix3x4_Multiply(&RagDoll[RagDollID].ragDollMesh->outframe[i], RagDoll[RagDollID].ragDollMesh->outframe[parent], mat);
+            }
+            else
+                memset(&RagDoll[RagDollID].ragDollMesh->outframe[i], 0, sizeof(matrix3x4_t));
+
+        nextjoint:;
+		}
+	}
+}
+
+qboolean R_Mesh_CullBBox (vec3_t bbox[8]);
+
+qboolean IQM_CullModel( void )
+{
+	int i;
+	vec3_t	vectors[3];
+	vec3_t  angles;
+	vec3_t	dist;
+	vec3_t bbox[8];
+
+	VectorSubtract(r_origin, currententity->origin, dist);
+
+	/*
+	** rotate the bounding box
+	*/
+	VectorCopy( currententity->angles, angles );
+	angles[YAW] = -angles[YAW];
+	AngleVectors( angles, vectors[0], vectors[1], vectors[2] );
+
+	for ( i = 0; i < 8; i++ )
+	{
+		vec3_t tmp;
+
+		VectorCopy( currentmodel->bbox[i], tmp );
+
+		bbox[i][0] = DotProduct( vectors[0], tmp );
+		bbox[i][1] = -DotProduct( vectors[1], tmp );
+		bbox[i][2] = DotProduct( vectors[2], tmp );
+
+		VectorAdd( currententity->origin, bbox[i], bbox[i] );
+	}
+
+	// Keep nearby meshes so shadows don't blatantly disappear when out of frustom
+	if (VectorLength(dist) > 150 && R_Mesh_CullBBox (bbox))
+		return true;
+	
+	// TODO: could probably find a better place for this.
 	if(r_ragdolls->integer)
 	{
 		//Ragdolls take over at beginning of each death sequence
-		if(!(currententity->flags & RF_TRANSLUCENT))
+		if	(	!(currententity->flags & RF_TRANSLUCENT) &&
+				currentmodel->hasRagDoll && 
+				(currententity->frame == 199 || 
+				currententity->frame == 220 ||
+				currententity->frame == 238)
+			)
 		{
-			if(currententity->frame == 199 || currententity->frame == 220 || currententity->frame == 238)
-				if(currentmodel->hasRagDoll)
-					RGD_AddNewRagdoll(currententity->origin, currententity->name);
+			// Make sure the positions of all the arms and legs and stuff have
+			// been initialized-- necessary for the current player's avatar,
+			// which has not yet been rendered.
+			IQM_AnimateFrame (); 
+			RGD_AddNewRagdoll(currententity->origin, currententity->name);
 		}
 		//Do not render deathframes if using ragdolls - do not render translucent helmets
 		if((currentmodel->hasRagDoll || (currententity->flags & RF_TRANSLUCENT)) && currententity->frame > 198)
-			return;
+			return true;
 	}
-
-	//modelpitch = 0.52 * sinf(rs_realtime); //use this for testing only
-	modelpitch = degreeToRadian(currententity->angles[PITCH]); 
-
-	R_GetLightVals(currententity->origin, false);	
-		
-	R_GenerateEntityShadow();
-
-	if ( currententity->flags & ( RF_SHELL_HALF_DAM | RF_SHELL_GREEN | RF_SHELL_RED | RF_SHELL_BLUE | RF_SHELL_DOUBLE) )
-	{
-
-		VectorClear (shadelight);
-		if (currententity->flags & RF_SHELL_HALF_DAM)
-		{
-				shadelight[0] = 0.56;
-				shadelight[1] = 0.59;
-				shadelight[2] = 0.45;
-		}
-		if ( currententity->flags & RF_SHELL_DOUBLE )
-		{
-			shadelight[0] = 0.9;
-			shadelight[1] = 0.7;
-		}
-		if ( currententity->flags & RF_SHELL_RED )
-			shadelight[0] = 1.0;
-		if ( currententity->flags & RF_SHELL_GREEN )
-		{
-			shadelight[1] = 1.0;
-			shadelight[2] = 0.6;
-		}
-		if ( currententity->flags & RF_SHELL_BLUE )
-		{
-			shadelight[2] = 1.0;
-			shadelight[0] = 0.6;
-		}
-	}
-	else if (currententity->flags & RF_FULLBRIGHT)
-	{
-		for (i=0 ; i<3 ; i++)
-			shadelight[i] = 1.0;
-	}
-	else
-	{
-		R_LightPoint (currententity->origin, shadelight, true);
-	}
-	if ( currententity->flags & RF_MINLIGHT )
-	{
-		float minlight;
-
-		if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
-			minlight = 0.1;
-		else
-			minlight = 0.2;
-		for (i=0 ; i<3 ; i++)
-			if (shadelight[i] > minlight)
-				break;
-		if (i == 3)
-		{
-			shadelight[0] = minlight;
-			shadelight[1] = minlight;
-			shadelight[2] = minlight;
-		}
-	}
-
-	if ( currententity->flags & RF_GLOW )
-	{	// bonus items will pulse with time
-		float	scale;
-		float	minlight;
-
-		scale = 0.2 * sin(r_newrefdef.time*7);
-		if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
-			minlight = 0.1;
-		else
-			minlight = 0.2;
-		for (i=0 ; i<3 ; i++)
-		{
-			shadelight[i] += scale;
-			if (shadelight[i] < minlight)
-				shadelight[i] = minlight;
-		}
-	}	
-
-	if (currententity->flags & RF_DEPTHHACK) // hack the depth range to prevent view model from poking into walls
-		qglDepthRange (gldepthmin, gldepthmin + 0.3*(gldepthmax-gldepthmin));
-
-	if (currententity->flags & RF_WEAPONMODEL)
-    {
-		qglMatrixMode(GL_PROJECTION);
-		qglPushMatrix();
-		qglLoadIdentity();
-
-		if (r_lefthand->integer == 1)
-		{
-			qglScalef(-1, 1, 1);
-			qglCullFace(GL_BACK);
-		}
-		if(r_newrefdef.fov_y < 75.0f)
-			MYgluPerspective(r_newrefdef.fov_y, (float)r_newrefdef.width / (float)r_newrefdef.height, 4.0f, 4096.0f);
-		else
-			MYgluPerspective(75.0f, (float)r_newrefdef.width / (float)r_newrefdef.height, 4.0f, 4096.0f);
-
-		qglMatrixMode(GL_MODELVIEW);
-
-		qglPushMatrix ();
-		currententity->angles[PITCH] = -currententity->angles[PITCH];	// sigh.
-		R_RotateForEntity (currententity);
-		currententity->angles[PITCH] = -currententity->angles[PITCH];	// sigh.
-    }
-	else
-	{
-		qglPushMatrix ();
-		currententity->angles[PITCH] = currententity->angles[ROLL] = 0;
-		R_RotateForEntity (currententity);
-	}
-
-	// select skin
-	if (currententity->skin) {
-		skin = currententity->skin;
-	}
-	else
-	{
-		skin = currentmodel->skins[0];
-	}
-	if (!skin)
-		skin = r_notexture;	// fallback...
-	GL_Bind(skin->texnum);
-
-	//check for valid script
-	use_vbo = true;
-	if(currententity->script && currententity->script->stage)
-	{
-		if(!strcmp("***r_notexture***", currententity->script->stage->texture->name) || 
-			((currententity->script->stage->fx || currententity->script->stage->glow) && !strcmp("***r_notexture***", currententity->script->stage->texture2->name)) ||
-			(currententity->script->stage->cube && !strcmp("***r_notexture***", currententity->script->stage->texture3->name)))
-		{
-			currententity->script = NULL; //bad shader!
-			use_vbo = false; //cannot use vbo without a valid shader
-		}
-	}
-	else if(!(currententity->flags & RF_TRANSLUCENT))
-		use_vbo = false;
-
-	// draw it
-
-	qglShadeModel (GL_SMOOTH);
-
-	GL_TexEnv( GL_MODULATE );
-
-	if ( currententity->flags & RF_TRANSLUCENT )
-	{
-		qglEnable (GL_BLEND);
-		qglBlendFunc (GL_ONE, GL_ONE);
-	}
-
-	//frame interpolation
-	time = (Sys_Milliseconds() - currententity->frametime) / 100;
-	if(time > 1.0)
-		time = 1.0;
-
-	if((currententity->frame == currententity->oldframe ) && !IQM_InAnimGroup(currententity->frame, currententity->oldframe))
-		time = 0;
-
-	//Check for stopped death anims
-	if(currententity->frame == 257 || currententity->frame == 237 || currententity->frame == 219)
-		time = 0;
-
-	frame = currententity->frame + time;
-
-	IQM_AnimateFrame(frame, IQM_NextFrame(currententity->frame));
-
-	if(!(currententity->flags & RF_VIEWERMODEL))
-		if (!(!cl_gun->integer && ( currententity->flags & RF_WEAPONMODEL ) ) )
-			IQM_DrawFrame(skin->texnum, false, 0.33);
-
-	GL_TexEnv( GL_REPLACE );
-	qglShadeModel (GL_FLAT);
-
-	qglPopMatrix ();
-
-	if ( ( currententity->flags & RF_WEAPONMODEL ) )
-	{
-		qglMatrixMode( GL_PROJECTION );
-		qglPopMatrix();
-		qglMatrixMode( GL_MODELVIEW );
-		qglCullFace( GL_FRONT );
-	}
-
-	if ( currententity->flags & RF_TRANSLUCENT )
-	{
-		qglDisable (GL_BLEND);
-		qglBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	}	
-
-	if (currententity->flags & RF_DEPTHHACK)
-		qglDepthRange (gldepthmin, gldepthmax);
 	
-	qglColor4f (1,1,1,1);	
-
-	if(r_minimap->integer)
-    {
-	   if ( currententity->flags & RF_MONSTER)
-	   {
-			RadarEnts[numRadarEnts].color[0]= 1.0;
-			RadarEnts[numRadarEnts].color[1]= 0.0;
-			RadarEnts[numRadarEnts].color[2]= 2.0;
-			RadarEnts[numRadarEnts].color[3]= 1.0;
-		}
-	    else
-			return;
-
-		VectorCopy(currententity->origin,RadarEnts[numRadarEnts].org);
-		numRadarEnts++;
-	}
+	return false;
 }
 
-void IQM_DrawCasterFrame ()
+//Can these next two be replaced with some type of animation grouping from the model?
+qboolean IQM_InAnimGroup(int frame, int oldframe)
 {
-	int     i, j;
-    int     index_xyz, index_st;
-    int     va = 0;
-	
-	if(!has_vbo)
-	{
-		R_InitVArrays (VERT_NO_TEXTURE);
-
-		for (i=0; i<currentmodel->num_triangles; i++)
-		{
-			for (j=0; j<3; j++)
-			{
-				index_xyz = index_st = currentmodel->tris[i].vertex[j];
-
-				VArray[0] = currentmodel->animatevertexes[index_xyz].position[0];
-				VArray[1] = currentmodel->animatevertexes[index_xyz].position[1];
-				VArray[2] = currentmodel->animatevertexes[index_xyz].position[2];
-
-				// increment pointer and counter
-				VArray += VertexSizes[VERT_NO_TEXTURE];
-				va++;
-			}
-		}
-
-		R_DrawVarrays(GL_TRIANGLES, 0, va);
-	}
-	else 
-	{			
-		//to do - just use a very basic shader for this instead of the normal mesh shader
-		glUseProgramObjectARB( g_blankmeshprogramObj );
-
-		//send outframe, blendweights, and blendindexes to shader
-		glUniformMatrix3x4fvARB( g_location_bmOutframe, currentmodel->num_joints, GL_FALSE, (const GLfloat *) currentmodel->outframe );
-
-		qglEnableClientState( GL_VERTEX_ARRAY );
-		GL_BindVBO(vbo_xyz);
-		qglVertexPointer(3, GL_FLOAT, 0, 0);
-
-		GL_BindVBO(NULL);
-
-		GL_BindIBO(vbo_indices);								
-
-		glEnableVertexAttribArrayARB(6);
-		glEnableVertexAttribArrayARB(7);
-		glVertexAttribPointerARB(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(unsigned char)*4, currentmodel->blendweights); 
-		glVertexAttribPointerARB(7, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(unsigned char)*4, currentmodel->blendindexes); 		
-
-		qglDrawElements(GL_TRIANGLES, currentmodel->num_triangles*3, GL_UNSIGNED_INT, 0);	
-	
-		GL_BindIBO(NULL);
-
-		glUseProgramObjectARB( 0 );
-		
-		glDisableVertexAttribArrayARB(6);
-		glDisableVertexAttribArrayARB(7);
-	}
-	
-	R_KillVArrays ();
+	//check if we are in a player anim group that is commonly looping
+	if(frame >= 0 && frame <= 39 && oldframe >=0 && oldframe <= 39)
+		return true; //standing, or 40 frame static mesh
+	else if(frame >= 40 && frame <=45 && oldframe >= 40 && oldframe <=45)
+		return true; //running
+	else if(frame >= 66 && frame <= 71 && oldframe >= 66 && oldframe <= 71)
+		return true; //jumping
+	else if(frame >= 0 && frame <= 23 && oldframe >= 0 && oldframe <= 23)
+		return true; //static meshes are 24 frames
+	else
+		return false;
 }
 
-void IQM_DrawCaster ( void )
-{
-	float		frame, time;
-	vec3_t		sv_angles;
-
-	if(currententity->team) //don't draw flag models, handled by sprites
-		return;
-
-	if ( currententity->flags & RF_WEAPONMODEL ) //don't draw weapon model shadow casters
-		return;
-
-	if ( currententity->flags & ( RF_SHELL_HALF_DAM | RF_SHELL_GREEN | RF_SHELL_RED | RF_SHELL_BLUE | RF_SHELL_DOUBLE) ) //no shells
-		return;
-
-	//modelpitch = 0.52 * sinf(rs_realtime); //use this for testing only
-	modelpitch = degreeToRadian(currententity->angles[PITCH]);
-
-	VectorCopy(currententity->angles, sv_angles);
-    qglPushMatrix ();
-	currententity->angles[PITCH] = currententity->angles[ROLL] = 0;
-	R_RotateForEntity (currententity);
-	VectorCopy(sv_angles, currententity->angles);
-
-	//frame interpolation
-	time = (Sys_Milliseconds() - currententity->frametime) / 100;
-	if(time > 1.0)
-		time = 1.0;
-
-	if((currententity->frame == currententity->oldframe ) && !IQM_InAnimGroup(currententity->frame, currententity->oldframe))
-		time = 0;
-
-	//Check for stopped death anims
-	if(currententity->frame == 257 || currententity->frame == 237 || currententity->frame == 219)
-		time = 0;
-
-	frame = currententity->frame + time;
-
-	use_vbo = true;
-	IQM_AnimateFrame(frame, IQM_NextFrame(currententity->frame));
-
-	IQM_DrawCasterFrame();
-
-	qglPopMatrix();
-}
-
+void R_Mesh_DrawCasterFrame (float backlerp, qboolean lerped);
 void IQM_DrawRagDollCaster ( int RagDollID )
 {
 	if ( RGD_CullRagDolls( RagDollID ) )
@@ -2152,12 +1057,11 @@ void IQM_DrawRagDollCaster ( int RagDollID )
 
     qglPushMatrix ();
 
-	use_vbo = true;
-	IQM_AnimateRagdoll(RagDollID, false);
+	IQM_AnimateRagdoll(RagDollID);
 
 	currentmodel = RagDoll[RagDollID].ragDollMesh;
 
-	IQM_DrawCasterFrame();
+	R_Mesh_DrawCasterFrame (0, false);
 
 	qglPopMatrix();
 }

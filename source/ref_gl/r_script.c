@@ -473,28 +473,24 @@ int RS_BlendID (char *blend)
 {
 	if (!blend[0])
 		return 0;
-	if (!Q_strcasecmp (blend, "GL_ZERO"))
-		return GL_ZERO;
-	if (!Q_strcasecmp (blend, "GL_ONE"))
-		return GL_ONE;
-	if (!Q_strcasecmp (blend, "GL_DST_COLOR"))
-		return GL_DST_COLOR;
-	if (!Q_strcasecmp (blend, "GL_ONE_MINUS_DST_COLOR"))
-		return GL_ONE_MINUS_DST_COLOR;
-	if (!Q_strcasecmp (blend, "GL_SRC_ALPHA"))
-		return GL_SRC_ALPHA;
-	if (!Q_strcasecmp (blend, "GL_ONE_MINUS_SRC_ALPHA"))
-		return GL_ONE_MINUS_SRC_ALPHA;
-	if (!Q_strcasecmp (blend, "GL_DST_ALPHA"))
-		return GL_DST_ALPHA;
-	if (!Q_strcasecmp (blend, "GL_ONE_MINUS_DST_ALPHA"))
-		return GL_ONE_MINUS_DST_ALPHA;
-	if (!Q_strcasecmp (blend, "GL_SRC_ALPHA_SATURATE"))
-		return GL_SRC_ALPHA_SATURATE;
-	if (!Q_strcasecmp (blend, "GL_SRC_COLOR"))
-		return GL_SRC_COLOR;
-	if (!Q_strcasecmp (blend, "GL_ONE_MINUS_SRC_COLOR"))
-		return GL_ONE_MINUS_SRC_COLOR;
+	
+#define check_blend(name) \
+	if (!Q_strcasecmp (blend, #name)) \
+		return name;
+	
+	check_blend (GL_ZERO)
+	check_blend (GL_ONE)
+	check_blend (GL_DST_COLOR)
+	check_blend (GL_ONE_MINUS_DST_COLOR)
+	check_blend (GL_SRC_ALPHA)
+	check_blend (GL_ONE_MINUS_SRC_ALPHA)
+	check_blend (GL_DST_ALPHA)
+	check_blend (GL_ONE_MINUS_DST_ALPHA)
+	check_blend (GL_SRC_ALPHA_SATURATE)
+	check_blend (GL_SRC_COLOR)
+	check_blend (GL_ONE_MINUS_SRC_COLOR)
+
+#undef check_blend
 
 	return 0;
 }
@@ -545,25 +541,58 @@ scriptname
 }
 */
 
-void rs_stage_map (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-
-	strncpy (stage->name, *token, sizeof(stage->name));
+#define RS_STAGE_STRING_ATTR(attrname) \
+void rs_stage_ ## attrname (rs_stage_t *stage, char **token) \
+{ \
+	*token = strtok (NULL, TOK_DELIMINATORS); \
+	strncpy (stage->attrname, *token, sizeof(stage->attrname)); \
 }
 
-void rs_stage_map2 (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-
-	strncpy (stage->name2, *token, sizeof(stage->name2));
+#define RS_STAGE_BOOL_ATTR(attrname) \
+void rs_stage_ ## attrname (rs_stage_t *stage, char **token) \
+{ \
+	stage->attrname = true; \
 }
 
-void rs_stage_map3 (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
+#define RS_STAGE_FLOAT_ATTR(attrname) \
+void rs_stage_ ## attrname (rs_stage_t *stage, char **token) \
+{ \
+	*token = strtok (NULL, TOK_DELIMINATORS); \
+	stage->attrname = (float)atof(*token); \
+}
 
-	strncpy (stage->name3, *token, sizeof(stage->name3));
+#define RS_STAGE_INT_ATTR(attrname) \
+void rs_stage_ ## attrname (rs_stage_t *stage, char **token) \
+{ \
+	*token = strtok (NULL, TOK_DELIMINATORS); \
+	stage->attrname = atoi(*token); \
+}
+
+RS_STAGE_STRING_ATTR (name)
+RS_STAGE_STRING_ATTR (name2)
+RS_STAGE_STRING_ATTR (name3)
+RS_STAGE_BOOL_ATTR (depthhack)
+RS_STAGE_BOOL_ATTR (envmap)
+RS_STAGE_BOOL_ATTR (alphamask)
+RS_STAGE_BOOL_ATTR (lensflare)
+RS_STAGE_INT_ATTR (flaretype)
+RS_STAGE_BOOL_ATTR (normalmap)
+RS_STAGE_BOOL_ATTR (grass)
+RS_STAGE_INT_ATTR (grasstype)
+RS_STAGE_BOOL_ATTR (beam)
+RS_STAGE_INT_ATTR (beamtype)
+RS_STAGE_BOOL_ATTR (fx)
+RS_STAGE_BOOL_ATTR (glow)
+RS_STAGE_BOOL_ATTR (cube)
+RS_STAGE_FLOAT_ATTR (xang)
+RS_STAGE_FLOAT_ATTR (yang)
+RS_STAGE_FLOAT_ATTR (rot_speed)
+RS_STAGE_INT_ATTR (rotating)
+
+
+void rs_stage_nolightmap (rs_stage_t *stage, char **token)
+{
+	stage->lightmap = false;
 }
 
 void rs_stage_colormap (rs_stage_t *stage, char **token)
@@ -698,32 +727,6 @@ void rs_stage_anim (rs_stage_t *stage, char **token)
 	}
 }
 
-void rs_stage_depthhack (rs_stage_t *stage, char **token)
-{
-	stage->depthhack = true;
-}
-
-void rs_stage_envmap (rs_stage_t *stage, char **token)
-{
-	stage->envmap = true;
-}
-
-void rs_stage_nolightmap (rs_stage_t *stage, char **token)
-{
-	stage->lightmap = false;
-}
-
-void rs_stage_alphamask (rs_stage_t *stage, char **token)
-{
-	stage->alphamask = true;
-}
-
-void rs_stage_rotate (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-	stage->rot_speed = (float)atof(*token);
-}
-
 void rs_stage_scale (rs_stage_t *stage, char **token)
 {
 	*token = strtok (NULL, TOK_DELIMINATORS);
@@ -753,64 +756,6 @@ void rs_stage_alphafunc (rs_stage_t *stage, char **token)
 		stage->alphafunc = ALPHAFUNC_BASIC;
 	else if (!Q_strcasecmp (*token, "-basic"))
 		stage->alphafunc = -ALPHAFUNC_BASIC;
-}
-void rs_stage_lensflare (rs_stage_t *stage, char **token)
-{
-	stage->lensflare = true;
-}
-void rs_stage_flaretype (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-	stage->flaretype = atoi(*token);
-}
-void rs_stage_normalmap (rs_stage_t *stage, char **token)
-{
-	stage->normalmap = true;
-}
-void rs_stage_grass (rs_stage_t *stage, char **token)
-{
-	stage->grass = true;
-}
-void rs_stage_grasstype (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-	stage->grasstype = atoi(*token);
-}
-void rs_stage_beam (rs_stage_t *stage, char **token)
-{
-	stage->beam = true;
-}
-void rs_stage_beamtype (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-	stage->beamtype = atoi(*token);
-}
-void rs_stage_xang (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-	stage->xang = atof(*token);
-}
-void rs_stage_yang (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-	stage->yang = atof(*token);
-}
-void rs_stage_rotating (rs_stage_t *stage, char **token)
-{
-	*token = strtok (NULL, TOK_DELIMINATORS);
-	stage->rotating = atoi(*token);
-}
-void rs_stage_fx (rs_stage_t *stage, char **token)
-{
-	stage->fx = true;
-}
-void rs_stage_glow (rs_stage_t *stage, char **token)
-{
-	stage->glow = true;
-}
-void rs_stage_cube (rs_stage_t *stage, char **token)
-{
-	stage->cube = true;
 }
 
 typedef struct 
@@ -960,9 +905,9 @@ void rs_stage_consume0 (rs_stage_t *stage, char **token)
 static rs_stagekey_t rs_stagekeys[] =
 {
 	{	"colormap",		&rs_stage_colormap		},
-	{	"map",			&rs_stage_map			},
-	{	"map2",			&rs_stage_map2			},
-	{	"map3",			&rs_stage_map3			},
+	{	"map",			&rs_stage_name			},
+	{	"map2",			&rs_stage_name2			},
+	{	"map3",			&rs_stage_name3			},
 	{	"scroll",		&rs_stage_scroll		},
 	{	"blendfunc",	&rs_stage_blendfunc		},
 	{	"alphashift",	&rs_stage_alphashift	},
@@ -972,12 +917,12 @@ static rs_stagekey_t rs_stagekeys[] =
 	{	"depthhack",	&rs_stage_depthhack		},
 	{	"nolightmap",	&rs_stage_nolightmap	},
 	{	"alphamask",	&rs_stage_alphamask		},
-	{	"rotate",		&rs_stage_rotate		},
+	{	"rotate",		&rs_stage_rot_speed		},
 	{	"scale",		&rs_stage_scale			},
 	{	"alphafunc",	&rs_stage_alphafunc		},
 	{	"lensflare",	&rs_stage_lensflare		},
 	{	"flaretype",	&rs_stage_flaretype		},
-	{   "normalmap",	&rs_stage_normalmap		},
+	{	"normalmap",	&rs_stage_normalmap		},
 	{	"grass",		&rs_stage_grass			},
 	{	"grasstype",	&rs_stage_grasstype		},
 	{	"beam",			&rs_stage_beam			},
@@ -1131,20 +1076,17 @@ void RS_ScanPathForScripts (void)
 	}
 
 	script_count = 0;
-	if(gl_normalmaps->value) { //search for normal map scripts ONLY if we are using normal mapping, do last to overide anything
+	script_list = FS_ListFilesInFS("scripts/normals/*.rscript", &script_count, 0, SFF_SUBDIR | SFF_HIDDEN | SFF_SYSTEM);
 
-		script_list = FS_ListFilesInFS("scripts/normals/*.rscript", &script_count, 0, SFF_SUBDIR | SFF_HIDDEN | SFF_SYSTEM);
-
-		if(script_list) {
-			for (i = 0; i < script_count; i++)
-			{
-				c = COM_SkipPath(script_list[i]);
-				Com_sprintf(script, MAX_OSPATH, "scripts/normals/%s", c);
-				RS_LoadScript(script);
-			}
-
-			FS_FreeFileList(script_list, script_count);
+	if(script_list) {
+		for (i = 0; i < script_count; i++)
+		{
+			c = COM_SkipPath(script_list[i]);
+			Com_sprintf(script, MAX_OSPATH, "scripts/normals/%s", c);
+			RS_LoadScript(script);
 		}
+
+		FS_FreeFileList(script_list, script_count);
 	}
 }
 
@@ -1273,41 +1215,31 @@ void RS_SetTexcoords2D (rs_stage_t *stage, float *os, float *ot)
 	if (stage->rot_speed)
 		RS_RotateST2 (os, ot, -stage->rot_speed * rs_realtime * 0.0087266388888888888888888888888889);
 
-	if (stage->scroll.speedX)
+	switch(stage->scroll.typeX)
 	{
-		switch(stage->scroll.typeX)
-		{
-			case 0:	// static
-				txm=rs_realtime*stage->scroll.speedX;
-				break;
-			case 1:	// sine
-				txm=sin(rs_realtime*stage->scroll.speedX);
-				break;
-			case 2:	// cosine
-				txm=cos(rs_realtime*stage->scroll.speedX);
-				break;
-		}
+		case 0:	// static
+			txm=rs_realtime*stage->scroll.speedX;
+			break;
+		case 1:	// sine
+			txm=sin(rs_realtime*stage->scroll.speedX);
+			break;
+		case 2:	// cosine
+			txm=cos(rs_realtime*stage->scroll.speedX);
+			break;
 	}
-	else
-		txm=0;
 
-	if (stage->scroll.speedY)
+	switch(stage->scroll.typeY)
 	{
-		switch(stage->scroll.typeY)
-		{
-			case 0:	// static
-				tym=rs_realtime*stage->scroll.speedY;
-				break;
-			case 1:	// sine
-				tym=sin(rs_realtime*stage->scroll.speedY);
-				break;
-			case 2:	// cosine
-				tym=cos(rs_realtime*stage->scroll.speedY);
-				break;
-		}
+		case 0:	// static
+			tym=rs_realtime*stage->scroll.speedY;
+			break;
+		case 1:	// sine
+			tym=sin(rs_realtime*stage->scroll.speedY);
+			break;
+		case 2:	// cosine
+			tym=cos(rs_realtime*stage->scroll.speedY);
+			break;
 	}
-	else
-		tym=0;
 
 	*os += txm;
 	*ot += tym;
@@ -1359,10 +1291,11 @@ void SetVertexOverbrights (qboolean toggle)
 {
 	if (!r_overbrightbits->value)
 		return;
+	
+	GL_SelectTexture (0);
 
 	if (toggle)//turn on
 	{
-		qglTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE_EXT);
 		qglTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_MODULATE);
 		qglTexEnvi(GL_TEXTURE_ENV, GL_RGB_SCALE_ARB, 1);
 		qglTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA_ARB, GL_MODULATE);
@@ -1373,55 +1306,6 @@ void SetVertexOverbrights (qboolean toggle)
 	{
 		GL_TexEnv( GL_MODULATE );
 		qglTexEnvi(GL_TEXTURE_ENV, GL_RGB_SCALE_ARB, 1);
-	}
-}
-
-void SetLightingMode (void)
-{
-	GL_SelectTexture( GL_TEXTURE0);
-
-	if ( !gl_config.mtexcombine ) 
-	{
-		GL_TexEnv( GL_REPLACE );
-		GL_SelectTexture( GL_TEXTURE1);
-
-		if ( gl_lightmap->value )
-			GL_TexEnv( GL_REPLACE );
-		else 
-			GL_TexEnv( GL_MODULATE );
-	}
-	else 
-	{
-		GL_TexEnv ( GL_COMBINE_EXT );
-		qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_REPLACE );
-		qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_RGB_EXT, GL_TEXTURE );
-		qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_ALPHA_EXT, GL_REPLACE );
-		qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_ALPHA_EXT, GL_TEXTURE );
-
-		GL_SelectTexture( GL_TEXTURE1 );
-		GL_TexEnv ( GL_COMBINE_EXT );
-		if ( gl_lightmap->value ) 
-		{
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_REPLACE );
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_RGB_EXT, GL_TEXTURE );
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_ALPHA_EXT, GL_REPLACE );
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_ALPHA_EXT, GL_TEXTURE );
-		} 
-		else 
-		{
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_MODULATE );
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_RGB_EXT, GL_TEXTURE );
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE1_RGB_EXT, GL_PREVIOUS_EXT );
-
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_ALPHA_EXT, GL_MODULATE );
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_ALPHA_EXT, GL_TEXTURE );
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE1_ALPHA_EXT, GL_PREVIOUS_EXT );
-		}
-
-		if ( r_overbrightbits->value )
-		{
-			qglTexEnvi ( GL_TEXTURE_ENV, GL_RGB_SCALE_EXT, r_overbrightbits->value );
-		}
 	}
 }
 
@@ -1436,7 +1320,7 @@ void ToggleLightmap (qboolean toggle)
 	{
 		SetVertexOverbrights(false);
 		GL_EnableMultitexture( true );
-		SetLightingMode ();
+		R_SetLightingMode ();
 	}
 	else
 	{
@@ -1545,34 +1429,18 @@ void RS_DrawSurfaceTexture (msurface_t *surf, rscript_t *rs)
 			ToggleLightmap(true);
 			qglShadeModel (GL_FLAT);
 
-			GL_MBind (GL_TEXTURE1, gl_state.lightmap_textures + lmtex);
-
-			if (stage->colormap.enabled)
-			qglDisable (GL_TEXTURE_2D);
-			else if (stage->anim_count){
-				GL_MBind (GL_TEXTURE0, RS_Animate(stage));
-			}
-			else
-			{
-		 		GL_MBind (GL_TEXTURE0, stage->texture->texnum);
-			}			
+			GL_MBind (1, gl_state.lightmap_textures + lmtex);
 		}
 		else 
 		{
 			ToggleLightmap(false);
 			qglShadeModel (GL_SMOOTH);
-
-			if (stage->colormap.enabled)
-				qglDisable (GL_TEXTURE_2D);
-			else if (stage->anim_count)
-			{
-				GL_Bind (RS_Animate(stage));
-			}
-			else
-			{
-		 		GL_Bind (stage->texture->texnum);
-			}			
 		}
+
+		if (stage->anim_count)
+			GL_MBind (0, RS_Animate(stage));
+		else
+	 		GL_MBind (0, stage->texture->texnum);
 				
 		if (stage->blendfunc.blend)
 		{
@@ -1609,40 +1477,31 @@ void RS_DrawSurfaceTexture (msurface_t *surf, rscript_t *rs)
 			}
 		}
 
-		if (stage->scroll.speedX)
+		switch (stage->scroll.typeX)
 		{
-			switch (stage->scroll.typeX)
-			{
-			case 0:	// static
-				txm = rs_realtime*stage->scroll.speedX;
-				break;
-			case 1:	// sine
-				txm = sin (rs_realtime*stage->scroll.speedX);
-				break;
-			case 2:	// cosine
-				txm = cos (rs_realtime*stage->scroll.speedX);
-				break;
-			}
+		case 0:	// static
+			txm = rs_realtime*stage->scroll.speedX;
+			break;
+		case 1:	// sine
+			txm = sin (rs_realtime*stage->scroll.speedX);
+			break;
+		case 2:	// cosine
+			txm = cos (rs_realtime*stage->scroll.speedX);
+			break;
 		}
-		else
-			txm=0;
 
-		if (stage->scroll.speedY)
+		switch (stage->scroll.typeY)
 		{
-			switch (stage->scroll.typeY)
-			{
-			case 0:	// static
-				tym = rs_realtime*stage->scroll.speedY;
-				break;
-			case 1:	// sine
-				tym = sin (rs_realtime*stage->scroll.speedY);
-				break;
-			case 2:	// cosine
-				tym = cos (rs_realtime*stage->scroll.speedY);
-				break;
-			}
-		} else
-			tym=0;
+		case 0:	// static
+			tym = rs_realtime*stage->scroll.speedY;
+			break;
+		case 1:	// sine
+			tym = sin (rs_realtime*stage->scroll.speedY);
+			break;
+		case 2:	// cosine
+			tym = cos (rs_realtime*stage->scroll.speedY);
+			break;
+		}
 
 		qglColor4f (1, 1, 1, alpha);
 
@@ -1683,19 +1542,16 @@ void RS_DrawSurfaceTexture (msurface_t *surf, rscript_t *rs)
 
 			RS_SetTexcoords (stage, &os, &ot, surf);
 			{
-				float red=255, green=255, blue=255;
+				float red=1.0, green=1.0, blue=1.0;
 
 				if (stage->colormap.enabled)
 				{
-					red *= stage->colormap.red/255.0f;
-					green *= stage->colormap.green/255.0f;
-					blue *= stage->colormap.blue/255.0f;
+					red = stage->colormap.red;
+					green = stage->colormap.green;
+					blue = stage->colormap.blue;
 				}
 
 				alpha = RS_AlphaFunc(stage->alphafunc, alpha, surf->plane->normal, v);
-				if (red>1)red=1; if (red<0) red = 0;
-				if (green>1)green=1; if (green<0) green = 0;
-				if (blue>1)blue=1; if (blue<0) blue = 0;
 
 				qglColor4f (red, green, blue, alpha);
 			}

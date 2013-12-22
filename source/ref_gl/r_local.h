@@ -202,9 +202,6 @@ extern  cvar_t		*r_minimap_style;
 
 extern	cvar_t	*gl_mirror;
 
-extern	cvar_t	*gl_arb_fragment_program;
-extern	cvar_t	*gl_glsl_shaders;
-
 extern	cvar_t	*sys_affinity;
 extern	cvar_t	*sys_priority;
 
@@ -232,10 +229,12 @@ extern	int		r_origin_leafnum;
 //Image
 void R_InitImageSubsystem(void);
 void GL_Bind (int texnum);
-void GL_MBind( GLenum target, int texnum );
-void GL_TexEnv( GLenum value );
-void GL_EnableMultitexture( qboolean enable );
-void GL_SelectTexture( GLenum );
+void GL_MBind (int target, int texnum);
+void GL_TexEnv (GLenum value);
+void GL_EnableTexture (int target, qboolean enable);
+void GL_EnableMultitexture (qboolean enable);
+void GL_SelectTexture (int target);
+void GL_InvalidateTextureState (void);
 void RefreshFont (void);
 
 extern void vectoangles (vec3_t value1, vec3_t angles);
@@ -264,7 +263,7 @@ extern void R_Shutdown( void );
 extern void R_SetupViewport (void);
 extern void R_RenderView (refdef_t *fd);
 extern void GL_ScreenShot_f (void);
-extern void R_DrawAliasModel (void);
+extern void R_Mesh_Draw (void);
 extern void R_DrawBrushModel (void);
 extern void R_DrawWorldSurfs (void);
 extern void R_RenderDlights (void);
@@ -282,6 +281,7 @@ extern void R_SubdivideSurface (msurface_t *fa, int firstedge, int numedges);
 extern qboolean R_CullBox (vec3_t mins, vec3_t maxs);
 extern qboolean R_CullOrigin(vec3_t origin);
 extern qboolean R_CullSphere( const vec3_t centre, const float radius, const int clipflags );
+void R_SetLightingMode (void);
 extern void R_RotateForEntity (entity_t *e);
 extern void R_MarkWorldSurfs (void);
 extern void R_AddSkySurface (msurface_t *fa);
@@ -317,7 +317,7 @@ extern int totalVBOsize;
 extern int	vboPosition;
 extern void R_LoadVBOSubsystem(void);
 extern void R_VCShutdown(void);
-extern void VB_VCInit(void);
+extern void VB_WorldVCInit(void);
 extern void VB_BuildVBOBufferSize(msurface_t *surf);
 extern void VB_BuildWorldVBO(void);
 void GL_SetupWorldVBO (void);
@@ -325,6 +325,7 @@ void GL_BindVBO(vertCache_t *cache);
 void GL_BindIBO(vertCache_t *cache);
 vertCache_t *R_VCFindCache(vertStoreMode_t store, model_t *mod);
 vertCache_t *R_VCLoadData(vertCacheMode_t mode, int size, void *buffer, vertStoreMode_t store, model_t *mod);
+extern void R_VCFree(vertCache_t *cache);
 
 //Light Bloom
 extern void R_BloomBlend( refdef_t *fd );
@@ -475,7 +476,6 @@ typedef struct
 	const char *version_string;
 	const char *extensions_string;
 	qboolean	allow_cds;
-	qboolean 	mtexcombine;
 } glconfig_t;
 
 typedef struct
@@ -489,8 +489,13 @@ typedef struct
 
     int         lightmap_textures;
 
-    int         currenttextures[3];
+#define MAX_TMUS 8
+    int         currenttextures[MAX_TMUS];
+    int			currenttexturemodes[MAX_TMUS];
+    qboolean	enabledtmus[MAX_TMUS];
     int         currenttmu;
+    qboolean	tmuswitch_done;
+    qboolean    currenttmu_defined;
 
     float       camera_separation;
     qboolean    stereo_enabled;
@@ -498,11 +503,8 @@ typedef struct
     qboolean    alpha_test;
     qboolean    blend;
     qboolean    texgen;
-    qboolean    fragment_program;
-    qboolean    glsl_shaders;
     qboolean    separateStencil;
     qboolean    stencil_wrap;
-    qboolean    vbo;
     qboolean    fbo;
     qboolean    hasFBOblit;
 
@@ -542,15 +544,9 @@ extern vec3_t ShadowArray[MAX_SHADOW_VERTS];
 
 // define our vertex types
 #define VERT_SINGLE_TEXTURED			0		// verts and st for 1 tmu
-#define VERT_BUMPMAPPED					1		// verts and st for 1 tmu, but with 2 texcoord pointers
 #define VERT_MULTI_TEXTURED				2		// verts and st for 2 tmus
-#define VERT_COLOURED_UNTEXTURED		3		// verts and colour
 #define VERT_COLOURED_TEXTURED			4		// verts, st for 1 tmu and colour
-#define VERT_COLOURED_MULTI_TEXTURED	5		// verts, st for 2 tmus and colour
-#define VERT_DUAL_TEXTURED				6		// verts, st for 2 tmus both with same st
 #define VERT_NO_TEXTURE					7		// verts only, no textures
-#define VERT_BUMPMAPPED_COLOURED		8		// verts and st for 1 tmu, 2 texoord pointers and colour
-#define VERT_NORMAL_COLOURED_TEXTURED	9		// verts and st for 1tmu and color, with normals
 
 // looks like these should be bit flags (2010-08)
 // apparently not - this was not working as bit flags, works fine as ints
@@ -571,7 +567,6 @@ void R_InitQuadVarrays(void);
 void R_AddSurfToVArray (msurface_t *surf);
 void R_AddShadowSurfToVArray (msurface_t *surf, vec3_t origin);
 void R_AddTexturedSurfToVArray (msurface_t *surf, float scroll);
-void R_AddLightMappedSurfToVArray (msurface_t *surf, float scroll);
 void R_AddGLSLShadedWarpSurfToVArray (msurface_t *surf, float scroll);
 void R_KillNormalTMUs(void);
 
@@ -597,8 +592,7 @@ extern			LightGroup_t LightGroups[MAX_LIGHTS];
 
 extern void		R_CheckFBOExtensions (void);
 extern void		R_GenerateShadowFBO(void);
-extern void		MD2_DrawCaster (void);
-extern void		IQM_DrawCaster (void);
+extern void		R_Mesh_DrawCaster (void);
 extern void		IQM_DrawRagDollCaster (int);
 extern void		R_DrawDynamicCaster(void);
 extern void		R_DrawVegetationCaster(void);
@@ -612,129 +606,162 @@ float			fadeShadow;
 cvar_t			*r_shadowcutoff;
 
 //shader programs
-extern void R_LoadARBPrograms(void);
 extern void	R_LoadGLSLPrograms(void);
 
-//arb fragment
-extern unsigned int g_water_program_id;
-
 //glsl
-extern GLhandleARB	g_programObj;
-extern GLhandleARB  g_shadowprogramObj;
-extern GLhandleARB	g_waterprogramObj;
-extern GLhandleARB	g_meshprogramObj;
-extern GLhandleARB  g_glassprogramObj;
-extern GLhandleARB	g_blankmeshprogramObj;
-extern GLhandleARB	g_fbprogramObj;
-extern GLhandleARB	g_blurprogramObj;
-extern GLhandleARB	g_rblurprogramObj;
-extern GLhandleARB  g_dropletsprogramObj;
-extern GLhandleARB  g_godraysprogramObj;
+GLhandleARB g_programObj;
+GLhandleARB g_shadowprogramObj;
+GLhandleARB g_waterprogramObj;
+GLhandleARB g_meshprogramObj;
+GLhandleARB g_vertexonlymeshprogramObj;
+GLhandleARB g_glassprogramObj;
+GLhandleARB g_blankmeshprogramObj;
+GLhandleARB g_fbprogramObj;
+GLhandleARB g_blurprogramObj;
+GLhandleARB g_rblurprogramObj;
+GLhandleARB g_dropletsprogramObj;
+GLhandleARB g_godraysprogramObj;
 
-extern GLhandleARB	g_vertexShader;
-extern GLhandleARB	g_fragmentShader;
+GLhandleARB g_vertexShader;
+GLhandleARB g_fragmentShader;
+
+//vertex attribute indexes
+//blame NVIDIA for this idiocy:
+// http://stackoverflow.com/questions/528028/glvertexattrib-which-attribute-indices-are-predefined
+#define ATTR_TANGENT_IDX	1
+#define ATTR_WEIGHTS_IDX	11
+#define ATTR_BONES_IDX 		12
+#define ATTR_OLDVTX_IDX		13
+#define ATTR_OLDNORM_IDX	14
+#define ATTR_OLDTAN_IDX		15
 
 //standard bsp surfaces
-extern GLuint		g_location_surfTexture;
-extern GLuint		g_location_eyePos;
-extern GLuint		g_tangentSpaceTransform;
-extern GLuint		g_location_heightTexture;
-extern GLuint		g_location_lmTexture;
-extern GLuint		g_location_normalTexture;
-extern GLuint		g_location_bspShadowmapTexture;
-extern GLuint		g_location_bspShadowmapTexture2;
-extern GLuint		g_location_bspShadowmapNum;
-extern GLuint		g_location_fog;
-extern GLuint		g_location_parallax;
-extern GLuint		g_location_dynamic;
-extern GLuint		g_location_shadowmap;
-extern GLuint		g_Location_statshadow;
-extern GLuint		g_location_xOffs;
-extern GLuint		g_location_yOffs;
-extern GLuint		g_location_lightPosition;
-extern GLuint		g_location_staticLightPosition;
-extern GLuint		g_location_lightColour;
-extern GLuint		g_location_lightCutoffSquared;
-extern GLuint		g_location_liquid;
-extern GLuint		g_location_shiny;
-extern GLuint		g_location_rsTime;
-extern GLuint		g_location_liquidTexture;
-extern GLuint		g_location_liquidNormTex;
-extern GLuint		g_location_chromeTex;
+GLuint		g_location_surfTexture;
+GLuint		g_location_eyePos;
+GLuint		g_tangentSpaceTransform;
+GLuint		g_location_heightTexture;
+GLuint		g_location_lmTexture;
+GLuint		g_location_normalTexture;
+GLuint		g_location_bspShadowmapTexture;
+GLuint		g_location_bspShadowmapTexture2;
+GLuint		g_location_fog;
+GLuint		g_location_parallax;
+GLuint		g_location_dynamic;
+GLuint		g_location_shadowmap;
+GLuint		g_Location_statshadow;
+GLuint		g_location_xOffs;
+GLuint		g_location_yOffs;
+GLuint		g_location_lightPosition;
+GLuint		g_location_staticLightPosition;
+GLuint		g_location_lightColour;
+GLuint		g_location_lightCutoffSquared;
+GLuint		g_location_liquid;
+GLuint		g_location_shiny;
+GLuint		g_location_rsTime;
+GLuint		g_location_liquidTexture;
+GLuint		g_location_liquidNormTex;
+GLuint		g_location_chromeTex;
 
-//shadows on white bsp surface
-extern GLuint		g_location_entShadow;
-extern GLuint		g_location_fadeShadow;
-extern GLuint		g_location_xOffset;
-extern GLuint		g_location_yOffset;
+//shadow on white bsp polys
+GLuint		g_location_entShadow;
+GLuint		g_location_fadeShadow;
+GLuint		g_location_xOffset;
+GLuint		g_location_yOffset;
 
 //water
-extern GLuint		g_location_baseTexture;
-extern GLuint		g_location_normTexture;
-extern GLuint		g_location_refTexture;
-extern GLuint		g_location_waterEyePos;
-extern GLuint		g_location_tangentSpaceTransform;
-extern GLuint		g_location_time;
-extern GLuint		g_location_lightPos;
-extern GLuint		g_location_reflect;
-extern GLuint		g_location_trans;
-extern GLuint		g_location_fogamount;
+GLuint		g_location_baseTexture;
+GLuint		g_location_normTexture;
+GLuint		g_location_refTexture;
+GLuint		g_location_waterEyePos;
+GLuint		g_location_tangentSpaceTransform;
+GLuint		g_location_time;
+GLuint		g_location_lightPos;
+GLuint		g_location_reflect;
+GLuint		g_location_trans;
+GLuint		g_location_fogamount;
+
+#define MESH_UNIFORM(name) \
+	((fragmentshader)?g_location_##name:g_location_vo_##name)
 
 //mesh
-extern GLuint		g_location_meshlightPosition;
-extern GLuint		g_location_baseTex;
-extern GLuint		g_location_normTex;
-extern GLuint		g_location_fxTex;
-extern GLuint		g_location_fx2Tex;
-extern GLuint		g_location_color;
-extern GLuint		g_location_meshNormal;
-extern GLuint		g_location_meshTime;
-extern GLuint		g_location_meshFog;
-extern GLuint		g_location_useFX;
-extern GLuint		g_location_useGlow;
-extern GLuint		g_location_useShell;
-extern GLuint		g_location_useCube;
-extern GLuint		g_location_useGPUanim;
-extern GLuint		g_location_outframe;
-extern GLuint		g_location_fromView;
+GLuint		g_location_meshlightPosition;
+GLuint		g_location_baseTex;
+GLuint		g_location_normTex;
+GLuint		g_location_fxTex;
+GLuint		g_location_fx2Tex;
+GLuint		g_location_color;
+GLuint		g_location_meshTime;
+GLuint		g_location_meshFog;
+GLuint		g_location_useFX;
+GLuint		g_location_useGlow;
+GLuint		g_location_useShell;
+GLuint		g_location_useCube;
+GLuint		g_location_useGPUanim;
+GLuint		g_location_outframe;
+GLuint		g_location_fromView;
+GLuint		g_location_lerp;
+
+//vertex-only mesh
+GLuint		g_location_vo_meshlightPosition;
+GLuint		g_location_vo_baseTex;
+GLuint		g_location_vo_normTex;
+GLuint		g_location_vo_fxTex;
+GLuint		g_location_vo_fx2Tex;
+GLuint		g_location_vo_color;
+GLuint		g_location_vo_meshTime;
+GLuint		g_location_vo_meshFog;
+GLuint		g_location_vo_useFX;
+GLuint		g_location_vo_useGlow;
+GLuint		g_location_vo_useShell;
+GLuint		g_location_vo_useCube;
+GLuint		g_location_vo_useGPUanim;
+GLuint		g_location_vo_outframe;
+GLuint		g_location_vo_fromView;
+GLuint		g_location_vo_lerp;
 
 //glass
-extern GLuint		g_location_gmirTexture;
-extern GLuint		g_location_grefTexture;
-extern GLuint		g_location_gLightPos;
-extern GLuint		g_location_gFog;
-extern GLuint		g_location_gOutframe;
+GLuint		g_location_g_type; // 1 means mirror only, 2 means glass only, 3 means both
+GLuint		g_location_g_left;
+GLuint		g_location_g_up;
+GLuint		g_location_g_mirTexture;
+GLuint		g_location_g_refTexture;
+GLuint		g_location_g_lightPos;
+GLuint		g_location_g_fog;
+GLuint		g_location_g_outframe;
+GLuint		g_location_g_useGPUanim;
+GLuint		g_location_g_lerp;
 
 //blank mesh
-extern GLuint		g_location_bmOutframe;
+GLuint		g_location_bm_outframe;
+GLuint		g_location_bm_useGPUanim;
+GLuint		g_location_bm_lerp;
 
 //fullscreen distortion effects
-extern GLuint		g_location_framebuffTex;
-extern GLuint		g_location_distortTex;
-extern GLuint		g_location_dParams;
-extern GLuint		g_location_fxPos;
+GLuint		g_location_framebuffTex;
+GLuint		g_location_distortTex;
+GLuint		g_location_dParams;
+GLuint		g_location_fxPos;
 
 //gaussian blur
-extern GLuint		g_location_scale;
-extern GLuint		g_location_source;
+GLuint		g_location_scale;
+GLuint		g_location_source;
 
 //radial blur	
-extern GLuint		g_location_rscale;
-extern GLuint		g_location_rsource;
-extern GLuint		g_location_rparams;
+GLuint		g_location_rscale;
+GLuint		g_location_rsource;
+GLuint		g_location_rparams;
 
 //water droplets
-extern GLuint		g_location_drSource;
-extern GLuint		g_location_drTex;
-extern GLuint		g_location_drTime;
-extern GLuint		g_location_drParams;
+GLuint		g_location_drSource;
+GLuint		g_location_drTex;
+GLuint		g_location_drTime;
+GLuint		g_location_drParams;
 
 //god rays
-extern GLuint		g_location_lightPositionOnScreen;
-extern GLuint		g_location_sunTex;
-extern GLuint		g_location_godrayScreenAspect;
-extern GLuint		g_location_sunRadius;
-
+GLuint		g_location_lightPositionOnScreen;
+GLuint		g_location_sunTex;
+GLuint		g_location_godrayScreenAspect;
+GLuint		g_location_sunRadius;
 //MD2
 extern void Mod_LoadMD2Model (model_t *mod, void *buffer);
 
@@ -752,6 +779,7 @@ float  dynFactor;
 extern void	R_GetLightVals(vec3_t origin, qboolean RagDoll);
 extern void R_ModelViewTransform(const vec3_t in, vec3_t out);
 extern void GL_BlendFunction (GLenum sfactor, GLenum dfactor);
+extern void R_Mesh_DrawFrame (int skinnum, qboolean ragdoll, float shellAlpha);
 
 //iqm
 #define pi 3.14159265
@@ -760,12 +788,13 @@ extern double degreeToRadian(double degree);
 extern qboolean Mod_INTERQUAKEMODEL_Load(model_t *mod, void *buffer);
 extern qboolean IQM_ReadSkinFile(char skin_file[MAX_OSPATH], char *skinpath);
 extern void R_DrawINTERQUAKEMODEL(void);
-extern void IQM_AnimateFrame(float curframe, int nextframe);
 extern qboolean IQM_InAnimGroup(int frame, int oldframe);
 extern int IQM_NextFrame(int frame);
-extern void IQM_AnimateRagdoll(int RagDollID, int shellEffect);
+extern void IQM_AnimateRagdoll(int RagDollID);
 extern void IQM_DrawFrame(int skinnum, qboolean ragdoll, float shellAlpha);
 extern void IQM_DrawShadow(vec3_t origin);
+extern qboolean IQM_CullModel( void );
+extern void IQM_AnimateFrame (void);
 
 //Ragdoll
 int r_DrawingRagDoll;

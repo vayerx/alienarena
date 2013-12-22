@@ -104,63 +104,6 @@ void R_InitVArrays (int varraytype)
 		return;
 	}
 
-	// 2 TMUs which share texcoords
-	if (varraytype == VERT_DUAL_TEXTURED)
-	{
-		// uses array indices 3, 4
-		qglClientActiveTextureARB (GL_TEXTURE0);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_DUAL_TEXTURED], &VArrayVerts[3]);
-
-		// uses array indices 3, 4
-		qglClientActiveTextureARB (GL_TEXTURE1);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_DUAL_TEXTURED], &VArrayVerts[3]);
-
-		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER);
-
-		return;
-	}
-
-	// the bumpmapped setup gets to reuse the verts as it's texcoords for tmu 0
-	if (varraytype == VERT_BUMPMAPPED)
-	{
-		// uses array indices 0, 1, 2
-		qglClientActiveTextureARB (GL_TEXTURE0);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (3, GL_FLOAT, sizeof (float) * VertexSizes[VERT_BUMPMAPPED], &VArrayVerts[0]);
-
-		// uses array indices 3, 4
-		qglClientActiveTextureARB (GL_TEXTURE1);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_BUMPMAPPED], &VArrayVerts[3]);
-
-		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER);
-
-		return;
-	}
-
-	if (varraytype == VERT_BUMPMAPPED_COLOURED)
-	{
-		// uses array indices 0, 1, 2
-		qglClientActiveTextureARB (GL_TEXTURE0);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (3, GL_FLOAT, sizeof (float) * VertexSizes[VERT_BUMPMAPPED_COLOURED], &VArrayVerts[0]);
-
-		// uses array indices 3, 4
-		qglClientActiveTextureARB (GL_TEXTURE1);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_BUMPMAPPED_COLOURED], &VArrayVerts[3]);
-
-		// uses array indices 5, 6, 7, 8
-		qglEnableClientState (GL_COLOR_ARRAY);
-		qglColorPointer (4, GL_FLOAT, sizeof (float) * VertexSizes[VERT_BUMPMAPPED_COLOURED], &VArrayVerts[5]);
-
-		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER | KILL_RGBA_POINTER);
-
-		return;
-	}
-
 	// a standard 2 tmu multitexture needs 2 texcoord pointers. to do - for bsp surface VBO, we will have some changes here
 	if (varraytype == VERT_MULTI_TEXTURED)
 	{
@@ -179,18 +122,6 @@ void R_InitVArrays (int varraytype)
 		return;
 	}
 
-	// no texture is used here but we do specify a colour (used in Q2 for laser beams, etc)
-	if (varraytype == VERT_COLOURED_UNTEXTURED)
-	{
-		// uses array indices 3, 4, 5, 6
-		qglEnableClientState (GL_COLOR_ARRAY);
-		qglColorPointer (4, GL_FLOAT, sizeof (float) * VertexSizes[VERT_COLOURED_UNTEXTURED], &VArrayVerts[3]);
-
-		KillFlags |= KILL_RGBA_POINTER;
-
-		return;
-	}
-
 	// single texture + colour (water, mdls, and so on)
 	if (varraytype == VERT_COLOURED_TEXTURED)
 	{
@@ -204,51 +135,6 @@ void R_InitVArrays (int varraytype)
 		qglColorPointer (4, GL_FLOAT, sizeof (float) * VertexSizes[VERT_COLOURED_TEXTURED], &VArrayVerts[5]);
 
 		KillFlags |= (KILL_TMU0_POINTER | KILL_RGBA_POINTER);
-
-		return;
-	}
-
-	// multi texture + colour
-	if (varraytype == VERT_COLOURED_MULTI_TEXTURED)
-	{
-		// uses array indices 3, 4
-		qglClientActiveTextureARB (GL_TEXTURE0);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_COLOURED_MULTI_TEXTURED], &VArrayVerts[3]);
-
-		// uses array indices 5, 6
-		qglClientActiveTextureARB (GL_TEXTURE1);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_COLOURED_MULTI_TEXTURED], &VArrayVerts[5]);
-
-		// uses array indices 7, 8, 9, 10
-		qglEnableClientState (GL_COLOR_ARRAY);
-		qglColorPointer (4, GL_FLOAT, sizeof (float) * VertexSizes[VERT_COLOURED_MULTI_TEXTURED], &VArrayVerts[7]);
-
-		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER | KILL_RGBA_POINTER);
-
-		return;
-	}
-	// textured with up to 3 TMU's, with normals
-	if (varraytype == VERT_NORMAL_COLOURED_TEXTURED)
-	{
-		// uses array indices 3, 4
-		qglClientActiveTextureARB (GL_TEXTURE0);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_NORMAL_COLOURED_TEXTURED], &VArrayVerts[3]);
-
-		qglClientActiveTextureARB (GL_TEXTURE1);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_NORMAL_COLOURED_TEXTURED], &VArrayVerts[3]);
-
-		qglClientActiveTextureARB (GL_TEXTURE2);
-		qglEnableClientState (GL_TEXTURE_COORD_ARRAY);
-		qglTexCoordPointer (2, GL_FLOAT, sizeof (float) * VertexSizes[VERT_NORMAL_COLOURED_TEXTURED], &VArrayVerts[3]);
-
-		// normal data
-		qglEnableClientState( GL_NORMAL_ARRAY );
-
-		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER | KILL_TMU2_POINTER | KILL_NORMAL_POINTER);
 
 		return;
 	}
@@ -317,8 +203,7 @@ void R_DrawVarrays(GLenum mode, GLint first, GLsizei count)
 	if(count < 1)
 		return; //do not send arrays of zero size to GPU!
 
-	if(gl_state.vbo)
-		GL_BindVBO(NULL); //make sure that we aren't using an invalid buffer
+	GL_BindVBO(NULL); //make sure that we aren't using an invalid buffer
 
 	qglDrawArrays (mode, first, count);
 }
@@ -484,79 +369,6 @@ void R_AddTexturedSurfToVArray (msurface_t *surf, float scroll)
 		// draw the poly
 		R_DrawVarrays(GL_POLYGON, 0, VertexCounter);
 	}
-}
-
-/*
-=================
-R_AddLightMappedSurfToVArray
-
-Adds a lightmapped surf to the varray.  The surface can have 1 or more polys, and the VArray is flushed immediately
-after each poly is rendered.
-
-It's assumed that the programmer has set up the vertex arrays properly before calling this, otherwise weird things may happen!!!
-=================
-*/
-void R_AddLightMappedSurfToVArray (msurface_t *surf, float scroll)
-{
-	glpoly_t *p = surf->polys;
-	float	*v;
-	int		i;
-	
-	// reset pointer and counter
-	VArray = &VArrayVerts[0];
-	VertexCounter = 0;
-
-	//non warped surfaces only have one poly
-	for (v = p->verts[0], i = 0 ; i < p->numverts; i++, v += VERTEXSIZE)
-	{
-		// copy in vertex data
-		VArray[0] = v[0];
-		VArray[1] = v[1];
-		VArray[2] = v[2];
-
-		// world texture coords
-		VArray[3] = v[3] + scroll;
-		VArray[4] = v[4];
-
-		// lightmap texture coords
-		VArray[5] = v[5];
-		VArray[6] = v[6];
-
-		// nothing else is needed
-		// increment pointer and counter
-		VArray += VertexSizes[VERT_MULTI_TEXTURED];
-		VertexCounter++;
-	}
-
-	/*
-	 * Mapping tool. Outline the light-mapped polygons.
-	 *  gl_showpolys == 1 : perform depth test.
-	 *  gl_showpolys == 2 : disable depth test. everything in "visible set"
-	 */
-	if (gl_showpolys->integer) // restricted cvar, maxclients = 1
-	{
-		qglDisable (GL_TEXTURE_2D);
-		if (gl_showpolys->integer >= 2)
-		{ // lots of lines so make them narrower
-			qglDisable(GL_DEPTH_TEST);
-			qglLineWidth (2.0f);
-		}
-		else
-		{ // less busy, wider line
-			qglLineWidth (3.0f);
-		}
-		qglColor4f (1.0f, 1.0f, 1.0f, 1.0f);
-		qglBegin (GL_LINE_LOOP);
-		for (v = p->verts[0], i = 0; i < p->numverts; i++, v += VERTEXSIZE) {
-			qglVertex3fv(p->verts[i]);
-		}
-		qglEnd();
-		qglEnable (GL_DEPTH_TEST);
-		qglEnable (GL_TEXTURE_2D);
-	}
-	
-	// draw the polys
-	R_DrawVarrays(GL_POLYGON, 0, VertexCounter);
 }
 
 void R_AddGLSLShadedWarpSurfToVArray (msurface_t *surf, float scroll)

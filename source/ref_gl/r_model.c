@@ -558,7 +558,7 @@ model_t *Mod_ForName (char *name, qboolean crash)
 
 		if (!strcmp (shortname, nameShortname) )
 		{
-			if (mod->type == mod_alias || mod->type == mod_iqm)
+			if (mod->type == mod_md2 || mod->type == mod_iqm)
 			{
 				// Make sure models scripts are definately reloaded between maps
 				image_t *img;
@@ -1410,7 +1410,7 @@ void Mod_LoadFaces (lump_t *l, lump_t *lighting)
 
 	BSP_BeginBuildingLightmaps (loadmodel);
 
-	VB_VCInit();
+	VB_WorldVCInit();
 
 	for ( surfnum=0 ; surfnum<count ; surfnum++, in++, out++)
 	{
@@ -1472,7 +1472,7 @@ void Mod_LoadFaces (lump_t *l, lump_t *lighting)
 				out->extents[i] = 16384;
 				out->texturemins[i] = -8192;
 			}
-			if(!(gl_state.glsl_shaders && gl_glsl_shaders->value) || !strcmp(out->texinfo->normalMap->name, out->texinfo->image->name))
+			if(!strcmp(out->texinfo->normalMap->name, out->texinfo->image->name))
 				R_SubdivideSurface (out, firstedge, numedges);	// cut up polygon for warps
 		}
 
@@ -1483,7 +1483,7 @@ void Mod_LoadFaces (lump_t *l, lump_t *lighting)
 			BSP_CreateSurfaceLightmap (out, smax, tmax, &light_s, &light_t);
 		}
 
-		if ( (! (out->texinfo->flags & SURF_WARP)) || (gl_state.glsl_shaders && gl_glsl_shaders->value && strcmp(out->texinfo->normalMap->name, out->texinfo->image->name)))
+		if ( (! (out->texinfo->flags & SURF_WARP)) || (strcmp(out->texinfo->normalMap->name, out->texinfo->image->name)))
 			BSP_BuildPolygonFromSurface(out, xscale, yscale, light_s, light_t, firstedge, numedges);
 
 		rs = (rscript_t *)out->texinfo->image->script;
@@ -1519,10 +1519,8 @@ void Mod_LoadFaces (lump_t *l, lump_t *lighting)
 		}
 		Mod_CalcSurfaceNormals(out);
 
-		if(gl_state.vbo) {
-			VB_BuildVBOBufferSize(out);
-			out->has_vbo = false;
-		}
+		VB_BuildVBOBufferSize(out);
+		out->has_vbo = false;
 	}
 	BSP_EndBuildingLightmaps ();
 }
@@ -2231,8 +2229,7 @@ void R_BeginRegistration (char *model)
 	RGD_BuildWorldTrimesh ();
 
 	//VBO
-	if(gl_state.vbo)
-		VB_BuildWorldVBO();
+	VB_BuildWorldVBO();
 }
 
 /*
@@ -2254,7 +2251,7 @@ struct model_s *R_RegisterModel (char *name)
 		mod->registration_sequence = registration_sequence;
 
 		// register any images used by the models
-		if (mod->type == mod_alias)
+		if (mod->type == mod_md2)
 		{
 			pheader = (dmdl_t *)mod->extradata;
 			for (i=0 ; i<pheader->num_skins ; i++)
@@ -2309,11 +2306,15 @@ void R_EndRegistration (void)
 
 /*
 ================
-Mod_Free
+Mod_Free - should be able to handle every model type
 ================
 */
+void R_Mesh_FreeVBO (model_t *mod);
 void Mod_Free (model_t *mod)
 {
+	if (mod->type > mod_brush)
+		R_Mesh_FreeVBO (mod);
+	// New model types go here
 	Hunk_Free (mod->extradata);
 	memset (mod, 0, sizeof(*mod));
 }

@@ -318,6 +318,8 @@ void SM_SetTextureMatrix( qboolean mapnum )
 		0.0, 0.5, 0.0, 0.0,
 		0.0, 0.0, 0.5, 0.0,
 		0.5, 0.5, 0.5, 1.0};
+	
+	GL_InvalidateTextureState (); // FIXME
 
 	// Grab modelview and transformation matrices
 	qglGetDoublev(GL_MODELVIEW_MATRIX, modelView);
@@ -325,15 +327,9 @@ void SM_SetTextureMatrix( qboolean mapnum )
 
 	qglMatrixMode(GL_TEXTURE);
 	if(mapnum)
-	{		
-		qglActiveTextureARB(GL_TEXTURE6); 
-		qglBindTexture(GL_TEXTURE_2D, r_depthtexture2->texnum);
-	}
+		GL_MBind (6, r_depthtexture2->texnum);
 	else
-	{
-		qglActiveTextureARB(GL_TEXTURE7);
-		qglBindTexture(GL_TEXTURE_2D, r_depthtexture->texnum);
-	}
+		GL_MBind (7, r_depthtexture->texnum);
 
 	qglLoadIdentity();
 	qglLoadMatrixd(bias);
@@ -344,8 +340,6 @@ void SM_SetTextureMatrix( qboolean mapnum )
 
 	// Go back to normal matrix mode
 	qglMatrixMode(GL_MODELVIEW);
-
-	qglActiveTextureARB(GL_TEXTURE0);
 
 }
 
@@ -722,7 +716,7 @@ void R_DrawDynamicCaster(void)
 	SM_SetupMatrices(dynLight->origin[0],dynLight->origin[1],dynLight->origin[2]+64,dynLight->origin[0],dynLight->origin[1],dynLight->origin[2]-128);
 
 	qglEnable( GL_POLYGON_OFFSET_FILL );
-    qglPolygonOffset( 0.5f, 0.5f );
+	qglPolygonOffset( 0.5f, 0.5f );
 
 	//render world - very basic geometry
 	R_DrawShadowMapWorld(false, origin);
@@ -738,10 +732,8 @@ void R_DrawDynamicCaster(void)
 		if(!currententity->model)
 			continue;
 
-		if (currententity->model->type != mod_alias && currententity->model->type != mod_iqm)
-		{
+		if (currententity->model->type <= mod_brush) 
 			continue;
-		}
 		
 		if (cl_simpleitems->integer && currententity->model->simple_texnum != 0)
 			continue; //TODO: simple items casting shadows?
@@ -779,18 +771,15 @@ void R_DrawDynamicCaster(void)
 				currentmodel = currententity->lod1;
 		}
 		if (currententity->lod2)
-		    currentmodel = currententity->lod2;
+			currentmodel = currententity->lod2;
 
-		if(currentmodel->type == mod_iqm)
-			IQM_DrawCaster ();
-		else
-			MD2_DrawCaster ();
+		R_Mesh_DrawCaster ();
 	}
 
 	for(RagDollID = 0; RagDollID < MAX_RAGDOLLS; RagDollID++)
 	{
 		if(RagDoll[RagDollID].destroyed)
-	        continue;
+			continue;
 		
 		//distance from light, if too far, don't render(to do - check against brightness for dist!)
 		VectorSubtract(dynLight->origin, RagDoll[RagDollID].curPos, dist);
@@ -814,7 +803,9 @@ void R_DrawDynamicCaster(void)
 	qglDepthMask (1);		// back to writing
 
 	qglPolygonOffset( 0.0f, 0.0f );
-    qglDisable( GL_POLYGON_OFFSET_FILL );
+	qglDisable( GL_POLYGON_OFFSET_FILL );
+	
+	GL_InvalidateTextureState (); // FIXME
 
 }
 
@@ -857,9 +848,9 @@ void R_Vectoangles (vec3_t value1, vec3_t angles)
 
 void R_DrawVegetationCasters ( qboolean forShadows )
 {
-    int		i, k;
+	int		i, k;
 	grass_t *grass;
-    float   scale;
+	float   scale;
 	vec3_t	dir, origin, angle, right, up, corner[4];
 	float	*corner0 = corner[0];
 	float	sway;
@@ -871,7 +862,7 @@ void R_DrawVegetationCasters ( qboolean forShadows )
 
 	R_InitVArrays (VERT_SINGLE_TEXTURED);
 
-    for (i=0; i<r_numgrasses; i++, grass++) 
+	for (i=0; i<r_numgrasses; i++, grass++) 
 	{
 		if(!grass->type)
 			continue; //only deal with leaves, grass shadows look kind of bad
@@ -891,7 +882,7 @@ void R_DrawVegetationCasters ( qboolean forShadows )
 
 			//render grass polygon
 			
-			GL_SelectTexture( GL_TEXTURE0);
+			GL_SelectTexture (0);
 			qglBindTexture (GL_TEXTURE_2D, grass->texnum);
 
 			GLSTATE_ENABLE_ALPHATEST
@@ -962,6 +953,8 @@ void R_DrawVegetationCasters ( qboolean forShadows )
 
 	qglColor4f( 1,1,1,1 );
 	GLSTATE_DISABLE_ALPHATEST
+	
+	GL_InvalidateTextureState (); // FIXME
 }
 
 void R_DrawVegetationCaster(void)
@@ -993,7 +986,7 @@ void R_DrawVegetationCaster(void)
 	SM_SetupMatrices(r_sunLight->origin[0],r_sunLight->origin[1],r_sunLight->origin[2],r_sunLight->target[0],r_sunLight->target[1],r_sunLight->target[2]);
 
 	qglEnable( GL_POLYGON_OFFSET_FILL );
-    qglPolygonOffset( 0.5f, 0.5f );
+	qglPolygonOffset( 0.5f, 0.5f );
 
 	//render vegetation
 	R_DrawVegetationCasters(true); 
@@ -1003,7 +996,7 @@ void R_DrawVegetationCaster(void)
 	qglDepthMask (1);		// back to writing
 
 	qglPolygonOffset( 0.0f, 0.0f );
-    qglDisable( GL_POLYGON_OFFSET_FILL );
+	qglDisable( GL_POLYGON_OFFSET_FILL );
 	qglEnable(GL_CULL_FACE);
 }
 
@@ -1011,6 +1004,7 @@ void R_DrawEntityCaster(entity_t *ent)
 {		
 	vec3_t	dist, mins, maxs;
 	trace_t	r_trace;
+	model_t *prev;
 
 	VectorSet(mins, 0, 0, 0);
 	VectorSet(maxs, 0, 0, 0);
@@ -1039,9 +1033,9 @@ void R_DrawEntityCaster(entity_t *ent)
 		return;
 
 	qglMatrixMode(GL_PROJECTION);
-    qglPushMatrix();
-    qglMatrixMode(GL_MODELVIEW);
-    qglPushMatrix();
+	qglPushMatrix();
+	qglMatrixMode(GL_MODELVIEW);
+	qglPushMatrix();
 
 	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT,fboId[1]); 
 
@@ -1065,12 +1059,14 @@ void R_DrawEntityCaster(entity_t *ent)
 	SM_SetupMatrices(statLightPosition[0],statLightPosition[1],statLightPosition[2]+64,ent->origin[0],ent->origin[1],ent->origin[2]-128);
 
 	qglEnable( GL_POLYGON_OFFSET_FILL );
-    qglPolygonOffset( 0.5f, 0.5f );	
+	qglPolygonOffset( 0.5f, 0.5f );	
 
 	//we could loop the entities here, and render any nearby models, to make sure we get shadows on the this entity if a mesh is nearby. 
 	//this would be only if we want to do self shadowing, or have player shadows cast on other mesh objects.  At this time, I think that the
 	//performance losses would not be worth doing this, but we can revisit.
 
+	prev = currentmodel;
+	
 	currentmodel = ent->model;
 
 	//get view distance
@@ -1088,35 +1084,36 @@ void R_DrawEntityCaster(entity_t *ent)
 			currentmodel = currententity->lod1;
 	}
 	if (currententity->lod2)
-	    currentmodel = currententity->lod2;
+		currentmodel = currententity->lod2;
 
-	if(currentmodel->type == mod_iqm)
-		IQM_DrawCaster ();
-	else
-		MD2_DrawCaster ();
+	R_Mesh_DrawCaster ();
 	
 	SM_SetTextureMatrix(1);
 		
 	qglDepthMask (1);		// back to writing
 
 	qglPolygonOffset( 0.0f, 0.0f );
-    qglDisable( GL_POLYGON_OFFSET_FILL );
+	qglDisable( GL_POLYGON_OFFSET_FILL );
 	qglEnable(GL_CULL_FACE);
 
 	// back to previous screen coordinates
 	R_SetupViewport ();
 
 	qglPopMatrix();
-    qglMatrixMode(GL_PROJECTION);
-    qglPopMatrix();
-    qglMatrixMode(GL_MODELVIEW);	
+	qglMatrixMode(GL_PROJECTION);
+	qglPopMatrix();
+	qglMatrixMode(GL_MODELVIEW);	
 
 	r_shadowmapcount = 1;
+	
+	currentmodel = prev;
+	
+	GL_InvalidateTextureState (); // FIXME
 }
 
 void R_GenerateEntityShadow( void )
 {
-	if(gl_shadowmaps->integer && gl_state.vbo && gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
+	if(gl_shadowmaps->integer && gl_normalmaps->integer)
 	{
 		vec3_t dist, tmp;
 		float rad;
@@ -1177,8 +1174,6 @@ void R_GenerateEntityShadow( void )
 			qglDisable ( GL_BLEND );
 		}
 
-		currentmodel = currententity->model;	
-		
 		r_shadowmapcount = 0;
 	}
 }
@@ -1199,9 +1194,9 @@ void R_DrawRagdollCaster(int RagDollID)
 		return;
 
 	qglMatrixMode(GL_PROJECTION);
-    qglPushMatrix();
-    qglMatrixMode(GL_MODELVIEW);
-    qglPushMatrix();
+	qglPushMatrix();
+	qglMatrixMode(GL_MODELVIEW);
+	qglPushMatrix();
 
 	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT,fboId[1]); 
 
@@ -1225,7 +1220,7 @@ void R_DrawRagdollCaster(int RagDollID)
 	SM_SetupMatrices(statLightPosition[0],statLightPosition[1],statLightPosition[2]+64,RagDoll[RagDollID].origin[0],RagDoll[RagDollID].origin[1],RagDoll[RagDollID].origin[2]-128);
 
 	qglEnable( GL_POLYGON_OFFSET_FILL );
-    qglPolygonOffset( 0.5f, 0.5f );	
+	qglPolygonOffset( 0.5f, 0.5f );	
 	
 	IQM_DrawRagDollCaster ( RagDollID );
 	
@@ -1234,23 +1229,25 @@ void R_DrawRagdollCaster(int RagDollID)
 	qglDepthMask (1);		// back to writing
 
 	qglPolygonOffset( 0.0f, 0.0f );
-    qglDisable( GL_POLYGON_OFFSET_FILL );
+	qglDisable( GL_POLYGON_OFFSET_FILL );
 	qglEnable(GL_CULL_FACE);
 
 	// back to previous screen coordinates
 	R_SetupViewport ();
 
 	qglPopMatrix();
-    qglMatrixMode(GL_PROJECTION);
-    qglPopMatrix();
-    qglMatrixMode(GL_MODELVIEW);	
+	qglMatrixMode(GL_PROJECTION);
+	qglPopMatrix();
+	qglMatrixMode(GL_MODELVIEW);	
 
 	r_shadowmapcount = 1;
+	
+	GL_InvalidateTextureState (); // FIXME
 }
 
 void R_GenerateRagdollShadow( int RagDollID )
 {
-	if(gl_shadowmaps->integer && gl_state.vbo && gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
+	if(gl_shadowmaps->integer && gl_normalmaps->integer)
 	{
 		vec3_t dist, tmp;
 		float rad;
