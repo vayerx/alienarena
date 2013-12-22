@@ -157,8 +157,8 @@ void VB_BuildWorldVBO(void)
 	
 	// just to keep the lines of code short
 	surfs = r_worldmodel->surfaces;
-	firstsurf = r_worldmodel->firstmodelsurface;
-	lastsurf = r_worldmodel->nummodelsurfaces+r_worldmodel->firstmodelsurface;
+	firstsurf = 0;
+	lastsurf = r_worldmodel->numsurfaces;
 	
 	for (i = 0; i < currentmodel->num_unique_texinfos; i++)
     {
@@ -347,7 +347,7 @@ void VB_VCInit()
 
 	for (i=0; i<MAX_VERTEX_CACHES; i++)
 	{
-		if(&vcm.vertCacheList[i])
+		if(vcm.vertCacheList[i].id)
 			qglDeleteBuffersARB(1, &vcm.vertCacheList[i].id);
 	}
 
@@ -381,7 +381,7 @@ void R_VCShutdown()
 	
 	for (i=0; i<MAX_VERTEX_CACHES; i++)
 	{
-		if(&vcm.vertCacheList[i])
+		if(vcm.vertCacheList[i].id)
 			qglDeleteBuffersARB(1, &vcm.vertCacheList[i].id);
 	}
 

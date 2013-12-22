@@ -557,7 +557,7 @@ typedef struct
 {
 	pmtype_t	pm_type;
 
-	short		origin[3];		// 12.3
+	int 		origin[3];		// 12.3
 	short		velocity[3];	// 12.3
 	byte		pm_flags;		// ducked, jump_held, etc
 	byte		pm_time;		// each unit = 8 ms
@@ -662,6 +662,7 @@ typedef struct
 #define	RF_SHELL_HALF_DAM	0x00020000
 #define RF_NOSHADOWS		0x00040000 //use this one for turning off shadows, etc.
 #define RF_MONSTER  		0x00080000
+#define	RF_NODRAW			0x00100000 //use this instead of a 0 modelindex for compatibility.
 #define RF_MENUMODEL		0x01280000 //for player menu
 
 
@@ -775,7 +776,7 @@ typedef struct
 #define	STAT_ARMOR				5
 #define	STAT_RED_MATCHES		6
 #define	STAT_BLUE_MATCHES		7
-//stat 8 is unused
+#define STAT_TACTICAL_SCORE		8
 #define	STAT_TIMER_ICON			9
 #define	STAT_TIMER				10
 #define	STAT_HELPICON			11
@@ -848,6 +849,12 @@ typedef struct
 
 #define	ANGLE2SHORT(x)	((int)((x)*65536/360) & 65535)
 #define	SHORT2ANGLE(x)	((x)*(360.0/65536))
+
+// Number of bytes per axis of world coordinates in the net protocol.
+// 2 is the default, backward-compatible number.
+// TODO: make this a variable, have it set based on the map size, server kicks
+// clients that don't support big maps.
+#define	coord_bytes		2
 
 
 //

@@ -64,8 +64,6 @@ extern qboolean mouse_available;
 extern qboolean mouse_is_position;
 extern int mouse_diff_x;
 extern int mouse_diff_y;
-extern int mouse_odiff_x;
-extern int mouse_odiff_y;
 extern float rs_realtime;
 extern viddef_t vid;
 
@@ -461,6 +459,7 @@ void HandleEvents( void )
 	int mwy = vid.height / 2;
 	int multiclicktime = 750;
 	int mouse_button;
+	static int last_mouse_x = 0, last_mouse_y = 0;
 
 	float f_sys_msecs;
 	unsigned u_sys_msecs;
@@ -492,28 +491,8 @@ void HandleEvents( void )
 			break;
 
 		case MotionNotify:
-			if ( mouse_is_position )
-			{ // allow mouse movement on menus in windowed mode
-				mouse_diff_x = event.xmotion.x;
-				mouse_diff_y = event.xmotion.y;
-			}
-			else
-			{
-				if ( dgamouse )
-				{ // TODO: find documentation for DGA mouse, explain this
-					mouse_diff_x += (event.xmotion.x + (vidmode_active ? 0 : win_x)) * 2;
-					mouse_diff_y += (event.xmotion.y + (vidmode_active ? 0 : win_y)) * 2;
-				}
-				else
-				{ // add the delta from the current position to the center
-					//  to the pointer motion accumulator
-					mouse_diff_x += ((int)event.xmotion.x - mwx);
-					mouse_diff_y += ((int)event.xmotion.y - mwy);
-
-					// flag to recenter pointer
-					dowarp = (mouse_diff_x != 0 || mouse_diff_y != 0 );
-				}
-			}
+			last_mouse_x = event.xmotion.x;
+			last_mouse_y = event.xmotion.y;
 			break;
 
 		case ButtonPress:
@@ -529,21 +508,24 @@ void HandleEvents( void )
 					mouse_button = 1;
 					break;
 				}
+				
+				if (mouse_button < MENU_CURSOR_BUTTON_MAX)
+				{
+					if ( (f_sys_msecs - cursor.buttontime[mouse_button])
+							< multiclicktime )
+						cursor.buttonclicks[mouse_button] += 1;
+					else
+						cursor.buttonclicks[mouse_button] = 1;
 
-				if ( (f_sys_msecs - cursor.buttontime[mouse_button])
-						< multiclicktime )
-					cursor.buttonclicks[mouse_button] += 1;
-				else
-					cursor.buttonclicks[mouse_button] = 1;
+					if ( cursor.buttonclicks[mouse_button] > 3 )
+						cursor.buttonclicks[mouse_button] = 3;
 
-				if ( cursor.buttonclicks[mouse_button] > 3 )
-					cursor.buttonclicks[mouse_button] = 3;
+					cursor.buttontime[mouse_button] = f_sys_msecs;
 
-				cursor.buttontime[mouse_button] = f_sys_msecs;
-
-				cursor.buttondown[mouse_button] = true;
-				cursor.buttonused[mouse_button] = false;
-				cursor.mouseaction = true;
+					cursor.buttondown[mouse_button] = true;
+					cursor.buttonused[mouse_button] = false;
+					cursor.mouseaction = true;
+				}
 
 				switch ( event.xbutton.button )
 				{
@@ -598,9 +580,11 @@ void HandleEvents( void )
 					break;
 				}
 
-				cursor.buttondown[mouse_button] = false;
-				cursor.buttonused[mouse_button] = false;
-				cursor.mouseaction = true;
+				if (mouse_button < MENU_CURSOR_BUTTON_MAX)
+				{
+					cursor.buttondown[mouse_button] = false;
+					cursor.buttonused[mouse_button] = false;
+				}
 
 				switch ( event.xbutton.button )
 				{
@@ -657,6 +641,29 @@ void HandleEvents( void )
 			break;
 		}
 	}
+	
+	if ( mouse_is_position )
+	{ // allow mouse movement on menus in windowed mode
+		mouse_diff_x = last_mouse_x;
+		mouse_diff_y = last_mouse_y;
+	}
+	else
+	{
+		if ( dgamouse )
+		{ // TODO: find documentation for DGA mouse, explain this
+			mouse_diff_x += (last_mouse_x + (vidmode_active ? 0 : win_x)) * 2;
+			mouse_diff_y += (last_mouse_y + (vidmode_active ? 0 : win_y)) * 2;
+		}
+		else
+		{ // add the delta from the current position to the center
+			//  to the pointer motion accumulator
+			mouse_diff_x += ((int)last_mouse_x - mwx);
+			mouse_diff_y += ((int)last_mouse_y - mwy);
+
+			// flag to recenter pointer
+			dowarp = (mouse_diff_x != 0 || mouse_diff_y != 0 );
+		}
+	}
 
 	if ( dowarp )
 	{ /* move the pointer back to the window center */
@@ -696,6 +703,10 @@ static void InitSig(void)
 */
 rserr_t GLimp_SetMode( unsigned *pwidth, unsigned *pheight, int mode, qboolean fullscreen )
 {
+	extern cvar_t	*vid_xpos;	// X coordinate of window position
+	extern cvar_t	*vid_ypos;	// Y coordinate of window position
+	int xpos, ypos;
+
 	int width, height;
 	int attrib[] = {
 		GLX_RGBA,
@@ -783,6 +794,9 @@ rserr_t GLimp_SetMode( unsigned *pwidth, unsigned *pheight, int mode, qboolean f
 		have_stencil = true;
 
 	vidmode_active = false;
+	
+	xpos = ypos = 0;
+	
 #if defined HAVE_XXF86VM
 	if (vidmode_ext) {
 		int best_fit, best_dist, dist, x, y, num_vidmodes;
@@ -818,6 +832,15 @@ rserr_t GLimp_SetMode( unsigned *pwidth, unsigned *pheight, int mode, qboolean f
 
 				// Move the viewport to top left
 				XF86VidModeSetViewPort(dpy, scrnum, 0, 0);
+				
+				if (width != actualWidth || height != actualHeight)
+				{
+					xpos = vid_xpos->integer;
+					ypos = vid_ypos->integer;
+					Com_Printf ("Resolution %dx%d is not supported natively by the display!\n", width, height);
+					Com_Printf ("Closest screen resolution is %dx%d. ", actualWidth, actualHeight); 
+					Com_Printf ("Use vid_xpos and vid_ypos to adjust the position of the game window (current offset is %d, %d)\n", xpos, ypos);
+				}
 			} else
 				fullscreen = 0;
 		}
@@ -871,12 +894,12 @@ rserr_t GLimp_SetMode( unsigned *pwidth, unsigned *pheight, int mode, qboolean f
 
 #if defined HAVE_XXF86VM
 	if (vidmode_active) {
-		XMoveWindow(dpy, win, 0, 0);
+		XMoveWindow(dpy, win, xpos, ypos);
 		XRaiseWindow(dpy, win);
 		XWarpPointer(dpy, None, win, 0, 0, 0, 0, 0, 0);
 		XFlush(dpy);
 		// Move the viewport to top left
-		XF86VidModeSetViewPort(dpy, scrnum, 0, 0);
+		XF86VidModeSetViewPort(dpy, scrnum, xpos, ypos);
 	}
 #endif // defined HAVE_XXF86VM
 

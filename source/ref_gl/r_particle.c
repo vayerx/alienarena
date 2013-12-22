@@ -60,7 +60,7 @@ void PART_DrawParticles( int num_particles, particle_t **particles, const unsign
 	vec3_t			corner[4], up, right, pup, pright, dir;
 	float			scale;
 	byte			color[4];
-	int			    oldtexnum = -1, oldblendsrc = -1, oldblenddst = -1;
+	int			    oldblendsrc = -1, oldblenddst = -1;
 	int				texnum=0, blenddst, blendsrc;
 	float			*corner0 = corner[0];
 	vec3_t move, delta, v;
@@ -78,6 +78,11 @@ void PART_DrawParticles( int num_particles, particle_t **particles, const unsign
 	qglDisable (GL_CULL_FACE);
 	
 	qsort (particles, num_particles, sizeof (particle_t *), compare_particle);
+	
+	GL_SelectTexture (GL_TEXTURE0);
+	// FIXME: OH FFS this is so stupid: tell the GL_Bind batching mechanism 
+	// that texture unit 0 has been re-bound, as it most certainly has been.
+	gl_state.currenttextures[gl_state.currenttmu] = -1;
 	
 	for ( p1 = particles, i=0; i < num_particles ; i++,p1++)
 	{
@@ -120,17 +125,14 @@ void PART_DrawParticles( int num_particles, particle_t **particles, const unsign
 		}
 
 		color[3] = p->current_alpha*255;
+		
+		GL_Bind (texnum);
 
-		if (texnum != oldtexnum || oldblendsrc != blendsrc || 
-			oldblenddst != blenddst)
+		if (oldblendsrc != blendsrc || oldblenddst != blenddst)
 		{	
-			if (oldtexnum != texnum)
-				qglBindTexture (GL_TEXTURE_2D, texnum);
-			
 			if (oldblendsrc != blendsrc || oldblenddst != blenddst)
 				qglBlendFunc ( blendsrc, blenddst );
 			
-			oldtexnum = texnum;
 			oldblendsrc = blendsrc;
 			oldblenddst = blenddst;
 		}
@@ -651,8 +653,6 @@ qboolean gluProject2(float objx, float objy, float objz, const float model[16], 
 }
 
 
-float sun_time = 0;
-float sun_alpha = 0;
 void R_InitSun()
 {
     draw_sun = false;
@@ -676,11 +676,12 @@ void R_InitSun()
 }
 
 
-void PART_RenderSunFlare(image_t * tex, float offset, float size, float r,
+void PART_RenderSunFlare(image_t * tex, float offset, float radius, float r,
                       float g, float b, float alpha)
 {
     float minx, miny, maxx, maxy;
-    float new_x, new_y, corr;
+    float new_x, new_y;
+    float diameter = 2.0*radius;
 
     qglColor4f(r, g, b, alpha);
     GL_Bind(tex->texnum);
@@ -693,28 +694,55 @@ void PART_RenderSunFlare(image_t * tex, float offset, float size, float r,
         new_y = sun_y;
     }
 
-    corr = 1;
-
-    minx = new_x - size * corr;
-    miny = new_y - size;
-    maxx = new_x + size * corr;
-    maxy = new_y + size;
-
-    qglBegin(GL_QUADS);
-    qglTexCoord2f(0, 0);
-    qglVertex2f(minx, miny);
-    qglTexCoord2f(1, 0);
-    qglVertex2f(maxx, miny);
-    qglTexCoord2f(1, 1);
-    qglVertex2f(maxx, maxy);
-    qglTexCoord2f(0, 1);
-    qglVertex2f(minx, maxy);
-    qglEnd();
+	
+	minx = new_x - radius;
+	miny = new_y - radius;
+	maxx = new_x + radius;
+	maxy = new_y + radius;
+	
+	if (r_test->integer && false)
+	{
+		// TODO: add an alpha channel to gfx/sun.jpg (will require converting
+		// to TGA) because otherwise this code makes no difference.
+		
+		minx += diameter * (float)tex->crop_left / (float)tex->upload_width;
+		miny += diameter * (float)tex->crop_top / (float)tex->upload_height;
+		maxx = minx + diameter * (float)tex->crop_width / (float)tex->upload_width;
+		maxy = miny + diameter * (float)tex->crop_height / (float)tex->upload_height;
+		
+	    qglBegin(GL_QUADS);
+		qglTexCoord2f(tex->crop_sl, tex->crop_tl);
+		qglVertex2f(minx, miny);
+		qglTexCoord2f(tex->crop_sh, tex->crop_tl);
+		qglVertex2f(maxx, miny);
+		qglTexCoord2f(tex->crop_sh, tex->crop_th);
+		qglVertex2f(maxx, maxy);
+		qglTexCoord2f(tex->crop_sl, tex->crop_th);
+		qglVertex2f(minx, maxy);
+		qglEnd();
+	}
+	else
+	{
+		qglBegin(GL_QUADS);
+		qglTexCoord2f(0, 0);
+		qglVertex2f(minx, miny);
+		qglTexCoord2f(1, 0);
+		qglVertex2f(maxx, miny);
+		qglTexCoord2f(1, 1);
+		qglVertex2f(maxx, maxy);
+		qglTexCoord2f(0, 1);
+		qglVertex2f(minx, maxy);
+		qglEnd();
+	}
 }
 
+float sun_alpha = 0;
 void R_RenderSun()
 {
-    float l, hx, hy;
+    static float l;
+    static float sun_vistest_time = 0;
+	static float sun_ramp_time = 0;
+    float hx, hy;
     float vec[2];
     float size;
 
@@ -727,21 +755,32 @@ void R_RenderSun()
     if (r_newrefdef.rdflags & RDF_NOWORLDMODEL)
         return;
 
-    qglReadPixels(sun_x, r_newrefdef.height - sun_y, 1, 1,
-                  GL_DEPTH_COMPONENT, GL_FLOAT, &l);
+    // The sun is only visible if a single pixel at sun_x, sun_y is not
+    // covered by anything. Just like lens flares, we ramp the opacity up and
+    // down linearly to smooth out transitions. Since glReadPixels is
+    // expensive, we only test visibility every SUN_VIS_TEST_PERIOD seconds,
+    // but to keep the opacity animation smooth, we do that every frame.
+
+    #define SUN_VIS_TEST_PERIOD 0.1
+    #define SUN_ALPHA_RAMP_PER_SECOND 7.5
+    #define SUN_ALPHA_RAMP_PER_FRAME (SUN_ALPHA_RAMP_PER_SECOND*(rs_realtime-sun_ramp_time))
 
     // periodically test visibility to ramp alpha
-    if(rs_realtime - sun_time > 0.02) {
+    if(rs_realtime - sun_vistest_time > SUN_VIS_TEST_PERIOD)
+    {
+	    qglReadPixels (	sun_x, r_newrefdef.height - sun_y, 1, 1,
+					    GL_DEPTH_COMPONENT, GL_FLOAT, &l);
+		sun_vistest_time = rs_realtime;
+	}
+	
+	// ramp opacity up or down each frame
+    sun_alpha += (l == 1.0 ? 1.0 : -1.0)*SUN_ALPHA_RAMP_PER_FRAME;
+    sun_ramp_time = rs_realtime;
 
-        sun_alpha += (l == 1.0 ? 0.15 : -0.15);  // ramp
-
-        if(sun_alpha > 1.0)  // clamp
-            sun_alpha = 1.0;
-        else if(sun_alpha < 0)
-            sun_alpha = 0.0;
-
-        sun_time = rs_realtime;
-    }
+    if(sun_alpha > 1.0)  // clamp
+        sun_alpha = 1.0;
+    else if(sun_alpha < 0)
+        sun_alpha = 0.0;
 
     if (sun_alpha > 0)
     {
@@ -750,7 +789,6 @@ void R_RenderSun()
         hy = r_newrefdef.height / 2;
         vec[0] = 1 - fabs(sun_x - hx) / hx;
         vec[1] = 1 - fabs(sun_y - hy) / hy;
-        l = 3 * vec[0] * vec[1] + 0.25;
 
         // set 2d
         qglMatrixMode(GL_PROJECTION);

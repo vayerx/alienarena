@@ -32,7 +32,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "r_text.h"
 #include "r_ttf.h"
-#include "r_bmfont.h"
 
 
 
@@ -108,6 +107,16 @@ static void _FNT_NullFont_WrappedPrint(
 		unsigned int	indent ,
 		FNT_window_t	box ,
 		const float *	color
+	)
+{
+	/* EMPTY */
+}
+
+
+static int _FNT_NullFont_PredictSize(
+		FNT_font_t	font ,
+		const char *	text,
+		qboolean color
 	)
 {
 	/* EMPTY */
@@ -221,6 +230,7 @@ FNT_font_t FNT_AutoGet(
 		face = NULL;
 	}
 	if ( face == NULL ) {
+		// fallback font
 		face = FNT_GetFace( auto_font->face );
 	}
 
@@ -265,6 +275,7 @@ qboolean FNT_Initialise( )
 		_FNT_NullFont->RawPrint = _FNT_NullFont_RawPrint;
 		_FNT_NullFont->BoundedPrint = _FNT_NullFont_BoundedPrint;
 		_FNT_NullFont->WrappedPrint = _FNT_NullFont_WrappedPrint;
+		_FNT_NullFont->PredictSize = _FNT_NullFont_PredictSize;
 	}
 
 	// Create hash tables for both faces and fonts
@@ -378,7 +389,9 @@ FNT_face_t FNT_GetFace( const char * face_name )
 	// Try looking it up first
 	face = HT_GetItem( _FNT_LoadedFaces , baseName , &created );
 	if ( created ) {
-		face->used = 0;
+		// Changed from 0 to 1. An initial value of 0 was causing face to be
+		// used after being freed.
+		face->used = 1;
 	} else {
 		face->used ++;
 		return face;
@@ -386,9 +399,6 @@ FNT_face_t FNT_GetFace( const char * face_name )
 
 	// Try loading it as a TrueType font
 	if ( TTF_InitFace( face ) )
-		return face;
-	// Now try as a bitmap font
-	if ( BMF_InitFace( face ) )
 		return face;
 
 	// Could not load

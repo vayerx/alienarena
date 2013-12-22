@@ -47,6 +47,8 @@ cvar_t	*allow_download_maps;
 cvar_t	*sv_airaccelerate;
 
 cvar_t	*sv_joustmode;
+cvar_t	*sv_tactical;
+cvar_t  *sv_excessive;
 
 cvar_t	*sv_noreload;			// don't reload level state when reentering
 
@@ -1406,6 +1408,8 @@ void SV_Init (void)
 	sv_airaccelerate = Cvar_Get("sv_airaccelerate", "0", CVAR_LATCH);
 
 	sv_joustmode = Cvar_Get("sv_joustmode", "0", CVAR_SERVERINFO);
+	sv_tactical = Cvar_Get("g_tactical", "0", CVAR_LATCH | CVAR_GAMEINFO);
+	sv_excessive = Cvar_Get("excessive", "0", CVAR_LATCH | CVAR_GAMEINFO);
 
 	public_server = Cvar_Get ("sv_public", "1", 0);
 
@@ -1417,6 +1421,8 @@ void SV_Init (void)
 
 	SZ_Init (&net_message, net_message_buffer, sizeof(net_message_buffer));
 	SZ_SetName (&net_message, "Net message buffer", true);
+
+	remoteserver_runspeed = 300; //default
 }
 
 /*

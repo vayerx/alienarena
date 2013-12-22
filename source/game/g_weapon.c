@@ -410,6 +410,10 @@ void fire_blasterball (edict_t *self, vec3_t start, vec3_t dir, int damage, int 
 		bolt->s.effects |= EF_PLASMA;
 		bolt->s.modelindex = gi.modelindex ("models/objects/fireball/tris.md2");
 	}
+	// All we care about is the effects. However, old clients will refuse to 
+	// draw them unless the modelindex is set. To work around this, newer
+	// clients have an RF_NODRAW flag. 
+	bolt->s.renderfx |= RF_NODRAW;
 	VectorClear (bolt->mins);
 	VectorClear (bolt->maxs);
 	bolt->s.sound = gi.soundindex ("misc/lasfly.wav");
@@ -432,6 +436,9 @@ void fire_blasterball (edict_t *self, vec3_t start, vec3_t dir, int damage, int 
 		VectorMA (bolt->s.origin, -10, dir, bolt->s.origin);
 		bolt->touch (bolt, tr.ent, NULL, NULL);
 	}
+	
+	if ( g_antilag->integer && g_antilagprojectiles->integer)
+		G_AntilagProjectile (bolt);
 }
 void fire_blaster (edict_t *self, vec3_t start, vec3_t muzzle, vec3_t aimdir, int damage, int speed, int effect, qboolean hyper)
 {
@@ -583,6 +590,9 @@ void fire_rocket (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed
 	rocket->classname = "rocket";
 
 	gi.linkentity (rocket);
+	
+	if ( g_antilag->integer && g_antilagprojectiles->integer)
+		G_AntilagProjectile (rocket);
 }
 
 /*
@@ -1533,6 +1543,7 @@ void prox_think (edict_t *self)
 		
 		T_RadiusDamage(self, self->owner, self->radius_dmg, NULL, self->dmg_radius, MOD_R_SPLASH, 2);
 
+
 		gi.WriteByte (svc_temp_entity);
 		gi.WriteByte (TE_BFG_BIGEXPLOSION);
 		gi.WritePosition (self->s.origin);
@@ -1608,7 +1619,6 @@ void fire_smartgrenade (edict_t *self, vec3_t start, vec3_t aimdir, int damage, 
 	floater->s.sound = gi.soundindex ("weapons/electroball.wav");
 	floater->classname = "grenade";
 	floater->nade_timer = 0;
-
 
 	gi.linkentity (floater);
 }
@@ -1882,6 +1892,10 @@ void fire_flamethrower(edict_t *self, vec3_t start, vec3_t dir, int damage, int 
 	VectorClear (flame->mins);
 	VectorClear (flame->maxs);
 	flame->s.modelindex = gi.modelindex ("models/objects/fireball/tris.md2");
+	// All we care about is the effects. However, old clients will refuse to 
+	// draw them unless the modelindex is set. To work around this, newer
+	// clients have an RF_NODRAW flag.
+	flame->s.renderfx |= RF_NODRAW;
 	flame->owner = self;
 	flame->touch = flame_touch;
 	flame->nextthink = level.time + 500/speed;
@@ -2090,6 +2104,186 @@ void fire_violator(edict_t *self, vec3_t start, vec3_t aimdir, int damage, int k
 
 	if ( g_antilag->integer)
 		G_UndoTimeShiftFor( self );
+}
+
+//Tactical - bombs
+
+void tactical_bomb_think (edict_t *self)
+{	
+	self->nextthink = level.time + FRAMETIME;
+
+	if(self->armed)
+	{		
+		self->s.frame++;
+		if(self->s.frame > 10)
+			self->s.frame = 10;
+		self->nade_timer++; //this should only start after armed
+	}
+	else //in cases of being disarmed
+	{
+		self->s.frame--;
+		if(self->s.frame < 0)
+			self->s.frame = 0;
+		self->nade_timer = 0;
+	}
+
+	if(self->nade_timer > 100) //10 seconds
+	{	//explode
+		
+		//avoid infinite recursion
+		self->takedamage = DAMAGE_NO;
+		
+		T_RadiusDamage(self, self->owner, self->radius_dmg, NULL, self->dmg_radius, MOD_R_SPLASH, 0);
+
+		//just send this bad boy to whole level, make it sound BIG
+		gi.sound( &g_edicts[1], CHAN_AUTO, gi.soundindex( "world/explosion1.wav" ), 1, ATTN_NONE, 0 );
+
+		gi.WriteByte (svc_temp_entity);
+		if(self->classname == "abomb")
+			gi.WriteByte (TE_BFG_BIGEXPLOSION);
+		else
+			gi.WriteByte (TE_ROCKET_EXPLOSION); //might want different, massive effect here
+		gi.WritePosition (self->s.origin);
+		gi.multicast (self->s.origin, MULTICAST_PHS);
+
+		G_FreeEdict (self);
+	}
+
+}
+void abomb_touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
+{
+	if (other == ent->owner)
+		return;
+
+	//detonator will set arming
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict (ent);
+		return;
+	}
+
+	//do we just want players with detonators to just touch them?  Touch for now...maybe actually fire one off in future?
+	if(other->has_detonator && other->ctype == 0)
+	{
+		
+		ent->armed = true;
+		other->has_detonator = false; //only get one
+		safe_bprintf(PRINT_HIGH, "Alien bomb is armed!\n"); 
+		gi.sound( &g_edicts[1], CHAN_AUTO, gi.soundindex( "weapons/adetonatorup.wav" ), 1, ATTN_NONE, 0 );
+	}
+	else if((other->has_minderaser || other->has_vaporizor) && ent->armed)
+	{
+		ent->armed = false;
+		safe_bprintf(PRINT_HIGH, "Alien bomb is disarmed!\n");
+		gi.sound( &g_edicts[1], CHAN_AUTO, gi.soundindex( "weapons/adetonatordown.wav" ), 1, ATTN_NONE, 0 );
+	}
+
+	return;
+}
+void hbomb_touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
+{
+	if (other == ent->owner)
+		return;
+
+	//detonator will set arming
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict (ent);
+		return;
+	}
+
+	//do we just want players with detonators to just touch them?  Touch for now...maybe actually fire one off in future?
+	if(other->has_detonator && other->ctype == 1)
+	{
+		ent->armed = true;
+		other->has_detonator = false; //only get one
+		safe_bprintf(PRINT_HIGH, "Bomb is armed!\n"); 
+		gi.sound( &g_edicts[1], CHAN_AUTO, gi.soundindex( "weapons/hdetonatorup.wav" ), 1, ATTN_NONE, 0 );
+	}
+	else if((other->has_minderaser || other->has_vaporizor) && ent->armed)
+	{
+		ent->armed = false;
+		safe_bprintf(PRINT_HIGH, "Bomb is disarmed!\n");
+		gi.sound( &g_edicts[1], CHAN_AUTO, gi.soundindex( "weapons/hdetonatordown.wav" ), 1, ATTN_NONE, 0 );
+	}
+
+	return;
+}
+void bomb_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
+{
+	float div;
+
+	//blowing up an armed bomb is still pretty bad, but it would be smarter to get it prior to being armed.
+	if(self->armed)
+		div = 2;
+	else
+		div = 10;
+
+	//avoid infinite recursion
+	self->takedamage = DAMAGE_NO;
+	
+	//explode - much smaller explosion.
+	T_RadiusDamage(self, self->owner, self->radius_dmg/div, NULL, self->dmg_radius/div, MOD_R_SPLASH, 0);
+
+	gi.WriteByte (svc_temp_entity);
+	if(self->classname == "abomb")
+		gi.WriteByte (TE_BFG_BIGEXPLOSION);
+	else
+		gi.WriteByte (TE_ROCKET_EXPLOSION);
+	gi.WritePosition (self->s.origin);
+	gi.multicast (self->s.origin, MULTICAST_PHS);
+
+	G_FreeEdict (self);
+}
+void fire_tacticalbomb (edict_t *self, vec3_t start, vec3_t aimdir, int speed)
+{
+	edict_t	*bomb;
+    vec3_t	dir, forward, right, up;
+	float *v;
+
+	vectoangles(aimdir, dir);
+	AngleVectors(dir, forward, right, up);
+
+	bomb = G_Spawn();
+	VectorCopy (start, bomb->s.origin);
+	VectorScale (aimdir, speed, bomb->velocity);
+	VectorMA (bomb->velocity, 20 + crandom() * 10.0, up, bomb->velocity);
+	VectorMA (bomb->velocity, crandom() * 10.0, right, bomb->velocity);
+	VectorSet (bomb->avelocity, 20, 20, 20);
+	bomb->movetype = MOVETYPE_BOUNCE;
+	bomb->clipmask = MASK_SHOT;
+	bomb->solid = SOLID_BBOX;
+	v = tv(-8,-8,0);
+	VectorCopy (v, bomb->mins);
+	v = tv(8,8,16);
+	VectorCopy (v, bomb->maxs);
+	if(self->ctype)
+	{
+		bomb->s.modelindex = gi.modelindex ("models/tactical/human_bomb.iqm"); 
+		bomb->touch = hbomb_touch;
+		bomb->classname = "hbomb";
+	}
+	else
+	{
+		bomb->s.modelindex = gi.modelindex ("models/tactical/alien_bomb.iqm");
+		bomb->touch = abomb_touch;
+		bomb->classname = "abomb";
+	}
+	bomb->owner = self;
+	bomb->think = tactical_bomb_think; 
+	bomb->nextthink = level.time + .1;    
+    bomb->dmg = 1000; //insane amount of damage power
+	bomb->radius_dmg = 1000;
+	bomb->dmg_radius = 512;	
+	bomb->takedamage = DAMAGE_YES;
+	bomb->health = 500; //make it somewhat hard to destroy
+	bomb->die = bomb_die; 
+	bomb->armed = false;
+	bomb->nade_timer = 0;
+
+	gi.linkentity (bomb);
 }
 
 #endif

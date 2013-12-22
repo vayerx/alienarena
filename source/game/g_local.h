@@ -122,7 +122,8 @@ typedef enum
 	AMMO_GRENADES,
 	AMMO_CELLS,
 	AMMO_SLUGS,
-	AMMO_SEEKERS
+	AMMO_SEEKERS,
+	AMMO_BOMBS
 } ammo_t;
 
 //teams
@@ -143,10 +144,6 @@ typedef struct teamcensus_s
 
 #define TEAM_GAME ( (dmflags->integer & (DF_SKINTEAMS)) \
 		|| ctf->integer || tca->integer || cp->integer )
-
-#define RED_TEAM				0
-#define BLUE_TEAM				1
-#define NO_TEAM					2
 
 //clientinfo origins
 #define INGAME					0
@@ -286,6 +283,8 @@ typedef struct
 #define WEAP_STRAFER			15
 #define WEAP_DEATHBALL			16
 #define WEAP_HOVER				17
+#define WEAP_ABOMB				18
+#define WEAP_HBOMB				19
 
 typedef struct gitem_s
 {
@@ -496,12 +495,34 @@ typedef struct
 
 } monsterinfo_t;
 
+//tactical
+typedef struct
+{
+	qboolean alienComputer;
+	int		 alienComputerHealth;
+	qboolean alienPowerSource;
+	int		 alienPowerSourceHealth;
+	qboolean alienAmmoDepot;
+	int		 alienAmmoDepotHealth;
+	qboolean alienBackupGen;
+
+	qboolean humanComputer;
+	int		 humanComputerHealth;
+	qboolean humanPowerSource;
+	int		 humanPowerSourceHealth;
+	qboolean humanAmmoDepot;
+	int		 humanAmmoDepotHealth;
+	qboolean humanBackupGen;
+
+} tactical_t;
+
 extern	game_locals_t	game;
 extern	level_locals_t	level;
 extern	game_import_t	gi;
 extern	game_export_t	globals;
 extern	spawn_temp_t	st;
 extern	g_vote_t		playervote;
+extern  tactical_t		tacticalScore;
 
 extern	int	sm_meat_index;
 
@@ -646,6 +667,7 @@ extern	cvar_t	*g_maxgrenades;
 extern	cvar_t	*g_maxcells;
 extern	cvar_t	*g_maxslugs;
 extern	cvar_t	*g_maxseekers;
+extern  cvar_t	*g_maxbombs;
 
 //quick weapon change
 extern  cvar_t  *quickweap;
@@ -908,6 +930,7 @@ void fire_blasterball (edict_t *self, vec3_t start, vec3_t dir, int damage, int 
 void fire_prox (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, float damage_radius, int radius_damage, float timer);
 void fire_fireball (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int speed, float damage_radius, int radius_damage);
 void fire_violator(edict_t *self, vec3_t start, vec3_t aimdir, int damage, int kick, int alt);
+void fire_tacticalbomb (edict_t *self, vec3_t start, vec3_t aimdir, int speed);
 #endif
 
 //deathball
@@ -957,6 +980,7 @@ void MoveClientsDownQueue(edict_t *ent);
 void SaveClientData (void);
 void FetchClientEntData (edict_t *ent);
 void TeamCensus( teamcensus_t* team_census );
+void ParseClassFile( char *config_file, edict_t *ent );
 
 //unlagged - g_unlagged.c
 void G_ResetHistory( edict_t *ent );
@@ -966,7 +990,7 @@ void G_UnTimeShiftAllClients( edict_t *skip );
 void G_DoTimeShiftFor( edict_t *ent );
 void G_UndoTimeShiftFor( edict_t *ent );
 void G_UnTimeShiftClient( edict_t *ent );
-void G_PredictPlayerMove( edict_t *ent, float frametime );
+void G_AntilagProjectile( edict_t *ent );
 //unlagged - g_unlagged.c
 
 //
@@ -1012,7 +1036,7 @@ void M_ChangeYaw (edict_t *ent);
 //
 // g_phys.c
 //
-void G_RunEntity (edict_t *ent);
+void G_RunEntity (edict_t *ent, float timespan);
 void SV_CheckVelocity (edict_t *ent);
 
 //
@@ -1103,11 +1127,25 @@ extern void SP_misc_teleporter_dest (edict_t *self);
 extern void SP_npc_cow (edict_t *self);
 extern void SP_npc_deathray(edict_t *self);
 
+//TCA
 extern void SP_misc_spiderpod (edict_t *self);
 extern void SP_misc_rednode (edict_t *self);
 extern void SP_misc_bluenode (edict_t *self);
 extern void SP_misc_bluespidernode (edict_t *self);
 extern void SP_misc_redspidernode (edict_t *self);
+
+//Tactical
+extern void SP_misc_aliencomputer (edict_t *self);
+extern void SP_misc_humancomputer (edict_t *self);
+extern void SP_misc_alienpowersrc (edict_t *self);
+extern void SP_misc_humanpowersrc (edict_t *self);
+extern void SP_misc_alienammodepot (edict_t *self);
+extern void SP_misc_humanammodepot (edict_t *self);
+extern void SP_misc_alienbackupgen (edict_t *self);
+extern void SP_misc_humanbackupgen (edict_t *self);
+extern void SP_misc_deathray (edict_t *self);
+extern void SP_misc_laser (edict_t *self);
+
 extern void SP_misc_mapmodel (edict_t *self);
 extern void SP_misc_watersplash (edict_t *ent);
 extern void SP_misc_electroflash (edict_t *ent);
@@ -1131,6 +1169,7 @@ extern void SP_misc_electroflash (edict_t *ent);
 #define BASE_GRENADES	50
 #define BASE_BULLETS	50
 #define BASE_SEEKERS	1
+#define BASE_BOMBS		1
 
 
 // client data that stays across multiple level loads
@@ -1162,6 +1201,7 @@ typedef struct
 	int			max_cells;
 	int			max_slugs;
 	int			max_seekers;
+	int			max_bombs;
 
 	gitem_t		*weapon;
 	gitem_t		*lastweapon;
@@ -1456,6 +1496,13 @@ struct edict_s
 	edict_t		*owner;
 	
 	int			redirect_number;	//for ghost mode
+	
+	// must be accessible to server code for collision detection
+	int			dmteam;
+	int			teamset;
+#define RED_TEAM				0
+#define BLUE_TEAM				1
+#define NO_TEAM					2
 
 
 	// DO NOT MODIFY ANYTHING ABOVE THIS, THE SERVER
@@ -1579,9 +1626,6 @@ struct edict_s
 	
 	edict_t		*replaced_weapon;
 
-	int			dmteam;
-	int			teamset;
-
 // ACEBOT_ADD
 	qboolean is_bot;
 	qboolean is_jumping;
@@ -1639,6 +1683,9 @@ struct edict_s
 	//Prox mines and grenades
 	int		nade_timer;
 
+	//bombs
+	int		armed;
+
 	//alt-fires
 	qboolean altfire;
 
@@ -1654,6 +1701,7 @@ struct edict_s
 	qboolean has_vaporizor;
 	qboolean has_minderaser;
 	int armor_type;
+	char charModel[128];
 
 	//model specific gibs
 	int usegibs;
@@ -1725,6 +1773,7 @@ extern qboolean StringToFilter (char *s, ipfilter_t *f);
 //unlagged
 extern	cvar_t	*g_antilag;
 extern  cvar_t	*g_antilagdebug;
+extern	cvar_t	*g_antilagprojectiles;
 
 // ACEBOT_ADD
 #include "acesrc/acebot.h"

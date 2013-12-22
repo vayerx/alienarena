@@ -553,13 +553,6 @@ void Mod_LoadMD2Model (model_t *mod, void *buffer)
 	for (i=0 ; i<pheader->num_glcmds ; i++)
 		poutcmd[i] = LittleLong (pincmd[i]);
 
-#if 0
-	// register all skins
-	memcpy ((char *)pheader + pheader->ofs_skins, (char *)pinmodel + pheader->ofs_skins,
-		pheader->num_skins*MAX_SKINNAME);
-	for (i=0 ; i<pheader->num_skins ; i++)
-		mod->skins[i] = GL_FindImage ((char *)pheader + pheader->ofs_skins + i*MAX_SKINNAME, it_skin);
-#else
 	// skin names are not always valid or file may not exist
 	// do not register skins that cannot be found to eliminate extraneous
 	//  file system searching.
@@ -579,37 +572,27 @@ void Mod_LoadMD2Model (model_t *mod, void *buffer)
 				pheader->num_skins--; // the important part: adjust skin count
 			pstring += MAX_SKINNAME;
 		}
-	}
-#endif
-
-	// load script
-	if(pheader->num_skins)
-	{
-		char rs[MAX_OSPATH];
-
-		strcpy(rs,(char *)pinmodel + LittleLong(pinmodel->ofs_skins));
-
-		rs[strlen(rs)-4]=0;
-
-		mod->script = RS_FindScript(rs);
-
+		
+		// load script
+		if (mod->skins[0] != NULL)
+    		mod->script = mod->skins[0]->script;
 		if (mod->script)
 			RS_ReadyScript( mod->script );
 	}
 
 	cx = pheader->num_st * sizeof(fstvert_t);
-    mod->st = st = (fstvert_t*)Hunk_Alloc (cx);
+	mod->st = st = (fstvert_t*)Hunk_Alloc (cx);
 
 	// Calculate texcoords for triangles
-    iw = 1.0 / pheader->skinwidth;
-    ih = 1.0 / pheader->skinheight;
-    for (i=0; i<pheader->num_st ; i++)
-    {
-        s = poutst[i].s;
-        t = poutst[i].t;
-        st[i].s = (s + 1.0) * iw; //tweak by one pixel
-        st[i].t = (t + 1.0) * ih;
-    }
+	iw = 1.0 / pheader->skinwidth;
+	ih = 1.0 / pheader->skinheight;
+	for (i=0; i<pheader->num_st ; i++)
+	{
+		s = poutst[i].s;
+		t = poutst[i].t;
+		st[i].s = (s + 1.0) * iw; //tweak by one pixel
+		st[i].t = (t + 1.0) * ih;
+	}
 
 	MD2_LoadVertexArrays(mod);
 
@@ -688,7 +671,7 @@ void Mod_LoadMD2Model (model_t *mod, void *buffer)
 
 	//redo this using max/min from all frames
 	pframe = ( daliasframe_t * ) ( ( byte * ) paliashdr +
-		                              paliashdr->ofs_frames);
+									  paliashdr->ofs_frames);
 
 	/*
 	** compute axially aligned mins and maxs
@@ -742,21 +725,21 @@ opposite directions.  This gives the shading a more prounounced, defined look.
 #if 0
 void MD2_VlightModel (vec3_t baselight, dtrivertx_t *verts, vec3_t lightOut)
 {
-    int i;
-    float l;
+	int i;
+	float l;
 
-    l = shadedots[verts->lightnormalindex];
-    VectorScale(baselight, l, lightOut);
+	l = shadedots[verts->lightnormalindex];
+	VectorScale(baselight, l, lightOut);
 
-    for (i=0; i<3; i++)
-    {
+	for (i=0; i<3; i++)
+	{
 		//add contrast - lights lighter, darks darker
 		lightOut[i] += (lightOut[i] - 0.25);
 
 		//keep values sane
-        if (lightOut[i]<0) lightOut[i] = 0;
-        if (lightOut[i]>1) lightOut[i] = 1;
-    }
+		if (lightOut[i]<0) lightOut[i] = 0;
+		if (lightOut[i]>1) lightOut[i] = 1;
+	}
 }
 #else
 /* Profiling shows this is a "hotspot". Calculation rearranged.
@@ -934,11 +917,11 @@ void R_GetLightVals(vec3_t meshOrigin, qboolean RagDoll)
 
 void R_ModelViewTransform(const vec3_t in, vec3_t out){
 	const float *v = in;
-    const float *m = r_world_matrix;
+	const float *m = r_world_matrix;
 
-    out[0] = m[0] * v[0] + m[4] * v[1] + m[8]  * v[2] + m[12];
-    out[1] = m[1] * v[0] + m[5] * v[1] + m[9]  * v[2] + m[13];
-    out[2] = m[2] * v[0] + m[6] * v[1] + m[10] * v[2] + m[14];
+	out[0] = m[0] * v[0] + m[4] * v[1] + m[8]  * v[2] + m[12];
+	out[1] = m[1] * v[0] + m[5] * v[1] + m[9]  * v[2] + m[13];
+	out[2] = m[2] * v[0] + m[6] * v[1] + m[10] * v[2] + m[14];
 }
 
 
@@ -960,6 +943,7 @@ static qboolean MD2_CullModel( vec3_t bbox[8] )
 		if(r_trace.fraction != 1.0)
 			return true;
 	}
+
 
 	VectorSubtract(r_origin, currententity->origin, dist);
 
@@ -1014,15 +998,206 @@ static qboolean MD2_CullModel( vec3_t bbox[8] )
 
 void MD2_LerpSelfShadowVerts( int nverts, dtrivertx_t *v, dtrivertx_t *ov, float *lerp, float move[3], float frontv[3], float backv[3] )
 {
-    int i;
-    for (i=0 ; i < nverts; i++, v++, ov++, lerp+=4)
-        {
-            lerp[0] = move[0] + ov->v[0]*backv[0] + v->v[0]*frontv[0];
-            lerp[1] = move[1] + ov->v[1]*backv[1] + v->v[1]*frontv[1];
-            lerp[2] = move[2] + ov->v[2]*backv[2] + v->v[2]*frontv[2];
-        }
+	int i;
+	for (i=0 ; i < nverts; i++, v++, ov++, lerp+=4)
+		{
+			lerp[0] = move[0] + ov->v[0]*backv[0] + v->v[0]*frontv[0];
+			lerp[1] = move[1] + ov->v[1]*backv[1] + v->v[1]*frontv[1];
+			lerp[2] = move[2] + ov->v[2]*backv[2] + v->v[2]*frontv[2];
+		}
 }
 
+void R_Mesh_SetupShell (int shell_skinnum, qboolean ragdoll, qboolean using_varray, vec3_t lightcolor)
+{
+	int i;
+	
+	//shell render
+	if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer) 
+	{
+		vec3_t lightVec, lightVal;
+
+		if(using_varray)
+		{
+			R_InitVArrays (VERT_NORMAL_COLOURED_TEXTURED);
+			qglNormalPointer(GL_FLOAT, 0, NormalsArray);
+			glEnableVertexAttribArrayARB (1);
+			glVertexAttribPointerARB(1, 4, GL_FLOAT,GL_FALSE, 0, TangentsArray);
+		}
+
+		//send light level and color to shader, ramp up a bit
+		VectorCopy(lightcolor, lightVal);
+		 for(i = 0; i < 3; i++) 
+		 {
+			if(lightVal[i] < shadelight[i]/2)
+				lightVal[i] = shadelight[i]/2; //never go completely black
+			lightVal[i] *= 5;
+			lightVal[i] += dynFactor;
+			if(lightVal[i] > 1.0+dynFactor)
+				lightVal[i] = 1.0+dynFactor;
+		}
+		
+		//brighten things slightly
+		for (i = 0; i < 3; i++ )
+			lightVal[i] *= (ragdoll?1.25:2.5);
+				   
+		//simple directional(relative light position)
+		VectorSubtract(lightPosition, currententity->origin, lightVec);
+		VectorMA(lightPosition, 1.0, lightVec, lightPosition);
+		R_ModelViewTransform(lightPosition, lightVec);
+
+		GL_EnableMultitexture( true );
+		
+		if (ragdoll)
+			qglDepthMask(false);
+
+		glUseProgramObjectARB( g_meshprogramObj );
+
+		glUniform3fARB( g_location_meshlightPosition, lightVec[0], lightVec[1], lightVec[2]);
+		
+		KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER);
+
+		GL_SelectTexture( GL_TEXTURE1);
+		GL_Bind (r_shelltexture2->texnum);
+		glUniform1iARB( g_location_baseTex, 1);
+
+		GL_SelectTexture( GL_TEXTURE0);
+		GL_Bind (r_shellnormal->texnum);
+		glUniform1iARB( g_location_normTex, 0);
+
+		glUniform1iARB( g_location_useFX, 0);
+
+		glUniform1iARB( g_location_useGlow, 0);
+
+		glUniform1iARB( g_location_useCube, 0);
+
+		glUniform1iARB( g_location_useShell, 1);
+
+		glUniform3fARB( g_location_color, lightVal[0], lightVal[1], lightVal[2]);
+
+		glUniform1fARB( g_location_meshTime, rs_realtime);
+
+		glUniform1iARB( g_location_meshFog, map_fog);
+		
+		glUniform1iARB(g_location_useGPUanim, 0);
+	}
+	else
+	{
+		GL_Bind(shell_skinnum);
+		R_InitVArrays (VERT_COLOURED_TEXTURED);
+	}
+}
+
+void R_Mesh_SetupGLSL (int skinnum, rscript_t *rs, vec3_t lightcolor)
+{
+	int i;
+	
+	//render with shaders - assume correct single pass glsl shader struct(let's put some checks in for this)
+	vec3_t lightVec, lightVal;
+
+	GLSTATE_ENABLE_ALPHATEST		
+
+	//send light level and color to shader, ramp up a bit
+	VectorCopy(lightcolor, lightVal);
+	for(i = 0; i < 3; i++)
+	{
+		if(lightVal[i] < shadelight[i]/2)
+			lightVal[i] = shadelight[i]/2; //never go completely black
+		lightVal[i] *= 5;
+		lightVal[i] += dynFactor;
+		if(r_newrefdef.rdflags & RDF_NOWORLDMODEL)
+		{
+			if(lightVal[i] > 1.5)
+				lightVal[i] = 1.5;
+		}
+		else
+		{
+			if(lightVal[i] > 1.0+dynFactor)
+				lightVal[i] = 1.0+dynFactor;
+		}
+	}
+	
+	if(r_newrefdef.rdflags & RDF_NOWORLDMODEL) //menu model
+	{
+		//fixed light source pointing down, slightly forward and to the left
+		lightPosition[0] = -25.0;
+		lightPosition[1] = 300.0;
+		lightPosition[2] = 400.0;
+		VectorMA(lightPosition, 5.0, lightVec, lightPosition);
+		R_ModelViewTransform(lightPosition, lightVec);
+
+		for (i = 0; i < 3; i++ )
+		{
+			lightVal[i] = 1.1;
+		}
+	}
+	else
+	{
+		//simple directional(relative light position)
+		VectorSubtract(lightPosition, currententity->origin, lightVec);
+		VectorMA(lightPosition, 5.0, lightVec, lightPosition);
+		R_ModelViewTransform(lightPosition, lightVec);
+
+		//brighten things slightly
+		for (i = 0; i < 3; i++ )
+		{
+			lightVal[i] *= 1.05;
+		}
+	}
+
+	GL_EnableMultitexture( true );
+
+	glUseProgramObjectARB( g_meshprogramObj );
+
+	glUniform3fARB( g_location_meshlightPosition, lightVec[0], lightVec[1], lightVec[2]);
+	glUniform3fARB( g_location_color, lightVal[0], lightVal[1], lightVal[2]);
+	
+	KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER | KILL_TMU2_POINTER);
+
+	GL_SelectTexture( GL_TEXTURE1);
+	GL_Bind (skinnum);
+	glUniform1iARB( g_location_baseTex, 1);
+
+	GL_SelectTexture( GL_TEXTURE0);
+	GL_Bind (rs->stage->texture->texnum);
+	glUniform1iARB( g_location_normTex, 0);
+
+	GL_SelectTexture( GL_TEXTURE2);
+	GL_Bind (rs->stage->texture2->texnum);
+	glUniform1iARB( g_location_fxTex, 2);
+
+	qglActiveTextureARB(GL_TEXTURE3);
+	GL_Bind (rs->stage->texture3->texnum);
+	glUniform1iARB( g_location_fx2Tex, 3);
+
+	GL_SelectTexture( GL_TEXTURE0);
+
+	if(rs->stage->fx)
+		glUniform1iARB( g_location_useFX, 1);
+	else
+		glUniform1iARB( g_location_useFX, 0);
+
+	if(rs->stage->glow)
+		glUniform1iARB( g_location_useGlow, 1);
+	else
+		glUniform1iARB( g_location_useGlow, 0);
+
+	glUniform1iARB( g_location_useShell, 0);	
+
+	if(rs->stage->cube)
+	{
+		glUniform1iARB( g_location_useCube, 1);
+		if(currententity->flags & RF_WEAPONMODEL)
+			glUniform1iARB( g_location_fromView, 1);
+		else
+			glUniform1iARB( g_location_fromView, 0);
+	}
+	else
+		glUniform1iARB( g_location_useCube, 0);
+
+	glUniform1fARB( g_location_meshTime, rs_realtime);
+
+	glUniform1iARB( g_location_meshFog, map_fog);
+}
 /*
 =============
 MD2_DrawFrame - standard md2 rendering
@@ -1144,6 +1319,8 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 
 	if(( currententity->flags & ( RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE | RF_SHELL_DOUBLE | RF_SHELL_HALF_DAM) ) )
 	{
+		R_Mesh_SetupShell (r_shelltexture->texnum, false, true, lightcolor);
+		
 		qglColor4f( shadelight[0], shadelight[1], shadelight[2], alpha);
 
 		VArray = &VArrayVerts[0];
@@ -1153,79 +1330,13 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 		else if (alpha > 1.0)
 			alpha = 1.0;
 
-		if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer) 
-		{
-            vec3_t lightVec, lightVal;
-
-			R_InitVArrays (VERT_NORMAL_COLOURED_TEXTURED);
-            qglNormalPointer(GL_FLOAT, 0, NormalsArray);
-			glEnableVertexAttribArrayARB (1);
-			glVertexAttribPointerARB(1, 4, GL_FLOAT,GL_FALSE, 0, TangentsArray);
-
-            //send light level and color to shader, ramp up a bit
-            VectorCopy(lightcolor, lightVal);
-            for(i = 0; i < 3; i++) 
-			{
-                if(lightVal[i] < shadelight[i]/2)
-                    lightVal[i] = shadelight[i]/2; //never go completely black
-                lightVal[i] *= 5;
-                lightVal[i] += dynFactor;
-                if(lightVal[i] > 1.0+dynFactor)
-                    lightVal[i] = 1.0+dynFactor;
-            }
-
-            //simple directional(relative light position)
-            VectorSubtract(lightPosition, currententity->origin, lightVec);
-            VectorMA(lightPosition, 1.0, lightVec, lightPosition);
-            R_ModelViewTransform(lightPosition, lightVec);
-
-            //brighten things slightly
-            for (i = 0; i < 3; i++ )
-                lightVal[i] *= 2.5;
-
-            GL_EnableMultitexture( true );
-
-            glUseProgramObjectARB( g_meshprogramObj );
-
-            glUniform3fARB( g_location_meshlightPosition, lightVec[0], lightVec[1], lightVec[2]);
-
-            qglActiveTextureARB( GL_TEXTURE1);
-            qglBindTexture (GL_TEXTURE_2D, r_shelltexture2->texnum);
-            glUniform1iARB( g_location_baseTex, 1);
-
-            qglActiveTextureARB( GL_TEXTURE0);
-            qglBindTexture (GL_TEXTURE_2D, r_shellnormal->texnum);
-            glUniform1iARB( g_location_normTex, 0);
-
-            glUniform1iARB( g_location_useFX, 0);
-
-            glUniform1iARB( g_location_useGlow, 0);
-
-			glUniform1iARB( g_location_useCube, 0);
-
-			glUniform1iARB( g_location_useShell, 1);
-
-            glUniform3fARB( g_location_color, lightVal[0], lightVal[1], lightVal[2]);
-
-            glUniform1fARB( g_location_meshTime, rs_realtime);
-
-            glUniform1iARB( g_location_meshFog, map_fog);
-
-			glUniform1iARB(g_location_useGPUanim, 0);
-        }
-		else
-		{
-			R_InitVArrays (VERT_COLOURED_TEXTURED);
-			GL_Bind(r_shelltexture->texnum);
-		}
-
 		for (i=0; i<paliashdr->num_tris; i++)
 		{
 			for (j=0; j<3; j++)
 			{
 				vec3_t normal;
 				vec4_t tangent;
-                int k;
+				int k;
 
 				index_xyz = tris[i].index_xyz[j];
 				index_st = tris[i].index_st[j];
@@ -1248,15 +1359,15 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 					{
 						for (k=0; k<3; k++)
 						{
-                            normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k] +
-                            ( r_avertexnormals[ov[index_xyz].lightnormalindex][k] -
-                            r_avertexnormals[verts[index_xyz].lightnormalindex][k] ) * backlerp;
+							normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k] +
+							( r_avertexnormals[ov[index_xyz].lightnormalindex][k] -
+							r_avertexnormals[verts[index_xyz].lightnormalindex][k] ) * backlerp;
 
 							tangent[k] = r_avertexnormals[tangents[index_xyz]][k] +
 							( r_avertexnormals[oldtangents[index_xyz]][k] -
 							r_avertexnormals[tangents[index_xyz]][k] ) * backlerp;
 						}
-                    }
+					}
 					else
 					{
 
@@ -1277,12 +1388,12 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 
 					if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
 					{
-                        for (k=0;k<3;k++)
+						for (k=0;k<3;k++)
 						{
-                            normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k];
+							normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k];
 							tangent[k] = r_avertexnormals[tangents[index_xyz]][k];
 						}
-                    }
+					}
 					else
 					{
 
@@ -1296,20 +1407,20 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 
 				if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
 				{
-                    VectorNormalize ( normal );
-                    VectorCopy(normal, NormalsArray[va]); //shader needs normal array
+					VectorNormalize ( normal );
+					VectorCopy(normal, NormalsArray[va]); //shader needs normal array
 					Vector4Copy(tangent, TangentsArray[va]);
 
-                }
+				}
 
-                // increment pointer and counter
-                if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
-                    VArray += VertexSizes[VERT_NORMAL_COLOURED_TEXTURED];
-                else
-                    VArray += VertexSizes[VERT_COLOURED_TEXTURED];
-                va++;
-            }
-        }
+				// increment pointer and counter
+				if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer)
+					VArray += VertexSizes[VERT_NORMAL_COLOURED_TEXTURED];
+				else
+					VArray += VertexSizes[VERT_COLOURED_TEXTURED];
+				va++;
+			}
+		}
 
 		if (!(!cl_gun->integer && ( currententity->flags & RF_WEAPONMODEL ) ) ) 
 		{
@@ -1317,17 +1428,17 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 		}
 
 		if(gl_glsl_shaders->integer && gl_state.glsl_shaders && gl_normalmaps->integer) {
-            glUseProgramObjectARB( 0 );
-            GL_EnableMultitexture( false );
-        }
+			glUseProgramObjectARB( 0 );
+			GL_EnableMultitexture( false );
+		}
 	}
 	else if(mirror || glass)
-    {        
+	{		
 		qboolean mirror_noweap;
-        int vertsize = VertexSizes[VERT_COLOURED_TEXTURED];
+		int vertsize = VertexSizes[VERT_COLOURED_TEXTURED];
 
-        mirror_noweap = mirror && !(currententity->flags & RF_WEAPONMODEL);
-       
+		mirror_noweap = mirror && !(currententity->flags & RF_WEAPONMODEL);
+	   
 		qglDepthMask(false);
 
 		if(mirror)
@@ -1335,17 +1446,17 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 			if( !(currententity->flags & RF_WEAPONMODEL))
 			{
 				R_InitVArrays(VERT_COLOURED_MULTI_TEXTURED);
-                vertsize = VertexSizes[VERT_COLOURED_MULTI_TEXTURED];
+				vertsize = VertexSizes[VERT_COLOURED_MULTI_TEXTURED];
 
 				GL_EnableMultitexture( true );
 				GL_SelectTexture( GL_TEXTURE0);
 				GL_TexEnv ( GL_COMBINE_EXT );
-				qglBindTexture (GL_TEXTURE_2D, r_mirrortexture->texnum);
+				GL_Bind (r_mirrortexture->texnum);
 				qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_REPLACE );
 				qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_RGB_EXT, GL_TEXTURE );
 				GL_SelectTexture( GL_TEXTURE1);
 				GL_TexEnv ( GL_COMBINE_EXT );
-				qglBindTexture (GL_TEXTURE_2D, r_mirrorspec->texnum);
+				GL_Bind (r_mirrorspec->texnum);
 				qglTexEnvi ( GL_TEXTURE_ENV, GL_COMBINE_RGB_EXT, GL_MODULATE );
 				qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE0_RGB_EXT, GL_TEXTURE );
 				qglTexEnvi ( GL_TEXTURE_ENV, GL_SOURCE1_RGB_EXT, GL_PREVIOUS_EXT );
@@ -1354,126 +1465,125 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 			{
 				R_InitVArrays (VERT_COLOURED_TEXTURED);
 				GL_SelectTexture( GL_TEXTURE0);
-				qglBindTexture (GL_TEXTURE_2D, r_mirrortexture->texnum);
+				GL_Bind (r_mirrortexture->texnum);
 			}
 		}
 		else
 		{
 			R_InitVArrays (VERT_COLOURED_TEXTURED);
 			GL_SelectTexture( GL_TEXTURE0);
-			qglBindTexture (GL_TEXTURE_2D, r_reflecttexture->texnum);
+			GL_Bind (r_reflecttexture->texnum);
 		}
-            
+			
 		if (mirror)
-        {
+		{
 			rs->stage->scale.scaleX = -1.0;
-            rs->stage->scale.scaleY = 1.0;
-        }
-        else 
-        {
-            rs->stage->scale.scaleX = rs->stage->scale.scaleY = 0.5;
-        }
-        
-        for (i=0; i<paliashdr->num_tris; i++)
-        {
-	        for (j=0; j<3; j++)
-            {
-		        vec3_t normal;
-                int k;
+			rs->stage->scale.scaleY = 1.0;
+		}
+		else 
+		{
+			rs->stage->scale.scaleX = rs->stage->scale.scaleY = 0.5;
+		}
+		
+		for (i=0; i<paliashdr->num_tris; i++)
+		{
+			for (j=0; j<3; j++)
+			{
+				vec3_t normal;
+				int k;
 
-                index_xyz = tris[i].index_xyz[j];
-                index_st = tris[i].index_st[j];
+				index_xyz = tris[i].index_xyz[j];
+				index_st = tris[i].index_st[j];
 
-                os = os2 = st[index_st].s;
-                ot = ot2 = st[index_st].t;
+				os = os2 = st[index_st].s;
+				ot = ot2 = st[index_st].t;
 
-                if(lerped)
-                {
-                    VArray[0] = s_lerped[index_xyz][0] = move[0] + ov[index_xyz].v[0]*backv[0] + v[index_xyz].v[0]*frontv[0];
-                    VArray[1] = s_lerped[index_xyz][1] = move[1] + ov[index_xyz].v[1]*backv[1] + v[index_xyz].v[1]*frontv[1];
-                    VArray[2] = s_lerped[index_xyz][2] = move[2] + ov[index_xyz].v[2]*backv[2] + v[index_xyz].v[2]*frontv[2];
+				if(lerped)
+				{
+					VArray[0] = s_lerped[index_xyz][0] = move[0] + ov[index_xyz].v[0]*backv[0] + v[index_xyz].v[0]*frontv[0];
+					VArray[1] = s_lerped[index_xyz][1] = move[1] + ov[index_xyz].v[1]*backv[1] + v[index_xyz].v[1]*frontv[1];
+					VArray[2] = s_lerped[index_xyz][2] = move[2] + ov[index_xyz].v[2]*backv[2] + v[index_xyz].v[2]*frontv[2];
 
-                    for (k=0; k<3; k++)
-                    {
-                        normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k] +
-                        ( r_avertexnormals[ov[index_xyz].lightnormalindex][k] -
-                        r_avertexnormals[verts[index_xyz].lightnormalindex][k] ) * backlerp;
+					for (k=0; k<3; k++)
+					{
+						normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k] +
+						( r_avertexnormals[ov[index_xyz].lightnormalindex][k] -
+						r_avertexnormals[verts[index_xyz].lightnormalindex][k] ) * backlerp;
 
-                    }
-                    // we can safely assume that the contents of
-                    // r_avertexnormals need not be converted to unit
-                    // vectors, however lerped normals may require this.
-                    VectorNormalize ( normal );
-                }
-                else
-                {
-                    VArray[0] = currentmodel->vertexes[index_xyz].position[0];
-                    VArray[1] = currentmodel->vertexes[index_xyz].position[1];
-                    VArray[2] = currentmodel->vertexes[index_xyz].position[2];
+					}
+					// we can safely assume that the contents of
+					// r_avertexnormals need not be converted to unit
+					// vectors, however lerped normals may require this.
+					VectorNormalize ( normal );
+				}
+				else
+				{
+					VArray[0] = currentmodel->vertexes[index_xyz].position[0];
+					VArray[1] = currentmodel->vertexes[index_xyz].position[1];
+					VArray[2] = currentmodel->vertexes[index_xyz].position[2];
 
-                    for (k=0;k<3;k++)
-                    {
-                        normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k];
-                    }
+					for (k=0;k<3;k++)
+					{
+						normal[k] = r_avertexnormals[verts[index_xyz].lightnormalindex][k];
+					}
 
 				}
-                
+				
 				if (!mirror || mirror_noweap)
-                {
+				{
 					os -= DotProduct (normal, vectors[1]);
-                    ot += DotProduct (normal, vectors[2]);
-                }
-                
-                RS_SetTexcoords2D(rs->stage, &os, &ot);
+					ot += DotProduct (normal, vectors[2]);
+				}
+				
+				RS_SetTexcoords2D(rs->stage, &os, &ot);
 
-                VArray[3] = os;
-                VArray[4] = ot;
+				VArray[3] = os;
+				VArray[4] = ot;
 
-                if(mirror_noweap)
-                {
+				if(mirror_noweap)
+				{
 					os2 -= DotProduct (normal, vectors[1] );
-                    ot2 += DotProduct (normal, vectors[2] );
-                    RS_SetTexcoords2D(rs->stage, &os2, &ot2);
+					ot2 += DotProduct (normal, vectors[2] );
+					RS_SetTexcoords2D(rs->stage, &os2, &ot2);
 
-                    VArray[5] = os2;
-                    VArray[6] = ot2;
+					VArray[5] = os2;
+					VArray[6] = ot2;
 					VArray[7] = VArray[8] = VArray[9] = 1;
-                    VArray[10] = alpha;
-                }
-                else
-                {
+					VArray[10] = alpha;
+				}
+				else
+				{
 					VArray[5] = VArray[6] = VArray[7] = 1;
-                    VArray[8] = alpha;
-                }
+					VArray[8] = alpha;
+				}
 
 				// increment pointer and counter
 				VArray += vertsize;
 				va++;
 			}
 		}
-		           
+				   
 		if (!(!cl_gun->integer && ( currententity->flags & RF_WEAPONMODEL )))
 		{
 			R_DrawVarrays(GL_TRIANGLES, 0, paliashdr->num_tris*3);
 		}
 
-        if(mirror && !(currententity->flags & RF_WEAPONMODEL))
-	        GL_EnableMultitexture( false );
+		if(mirror && !(currententity->flags & RF_WEAPONMODEL))
+			GL_EnableMultitexture( false );
 
 		qglDepthMask(true);
 
 	}
 	else if(rs && rs->stage->normalmap && gl_normalmaps->integer && gl_glsl_shaders->integer && gl_state.glsl_shaders)
 	{
-		vec3_t lightVec, lightVal;
 		qboolean dovbo;
-			
+		
 		dovbo = gl_state.vbo && !lerped;
-
-		GLSTATE_ENABLE_ALPHATEST		
-
+		
 		if(rs->stage->depthhack)
 			qglDepthMask(false);
+		
+		R_Mesh_SetupGLSL (skinnum, rs, lightcolor);
 				
 		if(dovbo)
 		{
@@ -1488,108 +1598,7 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 
 			KillFlags |= (KILL_TMU0_POINTER | KILL_TMU1_POINTER | KILL_TMU2_POINTER | KILL_TMU3_POINTER | KILL_NORMAL_POINTER); //needed to kill all of these texture units
 		}
-
-		//send light level and color to shader, ramp up a bit
-		VectorCopy(lightcolor, lightVal);
-		for(i = 0; i < 3; i++)
-		{
-			if(lightVal[i] < shadelight[i]/2)
-				lightVal[i] = shadelight[i]/2; //never go completely black
-			lightVal[i] *= 5;
-			lightVal[i] += dynFactor;
-			if(r_newrefdef.rdflags & RDF_NOWORLDMODEL)
-			{
-				if(lightVal[i] > 1.5)
-					lightVal[i] = 1.5;
-			}
-			else
-			{
-				if(lightVal[i] > 1.0+dynFactor)
-					lightVal[i] = 1.0+dynFactor;
-			}
-		}
-
-		if(r_newrefdef.rdflags & RDF_NOWORLDMODEL) //menu model
-		{
-			//fixed light source pointing down, slightly forward and to the left
-			lightPosition[0] = -25.0;
-			lightPosition[1] = 300.0;
-			lightPosition[2] = 400.0;
-			VectorMA(lightPosition, 5.0, lightVec, lightPosition);
-			R_ModelViewTransform(lightPosition, lightVec);
-
-			for (i = 0; i < 3; i++ )
-			{
-				lightVal[i] = 1.1;
-			}
-		}
-		else
-		{
-			//simple directional(relative light position)
-			VectorSubtract(lightPosition, currententity->origin, lightVec);
-			VectorMA(lightPosition, 5.0, lightVec, lightPosition);
-			R_ModelViewTransform(lightPosition, lightVec);
-
-			//brighten things slightly
-			for (i = 0; i < 3; i++ )
-			{
-				lightVal[i] *= 1.05;
-			}
-		}
-
-		GL_EnableMultitexture( true );
-
-		glUseProgramObjectARB( g_meshprogramObj );
-
-		glUniform3fARB( g_location_meshlightPosition, lightVec[0], lightVec[1], lightVec[2]);
-
-		qglActiveTextureARB( GL_TEXTURE1);
-		qglBindTexture (GL_TEXTURE_2D, skinnum);
-		glUniform1iARB( g_location_baseTex, 1);
-
-		qglActiveTextureARB( GL_TEXTURE0);
-		qglBindTexture (GL_TEXTURE_2D, rs->stage->texture->texnum);
-		glUniform1iARB( g_location_normTex, 0);
-
-		qglActiveTextureARB( GL_TEXTURE2);
-		qglBindTexture (GL_TEXTURE_2D, rs->stage->texture2->texnum);
-		glUniform1iARB( g_location_fxTex, 2);
-
-		qglActiveTextureARB(GL_TEXTURE3);
-		qglBindTexture (GL_TEXTURE_2D, rs->stage->texture3->texnum);
-		glUniform1iARB( g_location_fx2Tex, 3);
-
-		qglActiveTextureARB( GL_TEXTURE0);
-
-		if(rs->stage->fx)
-			glUniform1iARB( g_location_useFX, 1);
-		else
-			glUniform1iARB( g_location_useFX, 0);
-
-		if(rs->stage->glow)
-			glUniform1iARB( g_location_useGlow, 1);
-		else
-			glUniform1iARB( g_location_useGlow, 0);
-
-		if(rs->stage->cube)
-		{
-			glUniform1iARB( g_location_useCube, 1);
-			if(currententity->flags & RF_WEAPONMODEL)
-				glUniform1iARB( g_location_fromView, 1);
-			else
-				glUniform1iARB( g_location_fromView, 0);
-		}
-		else
-			glUniform1iARB( g_location_useCube, 0);
-
-		glUniform1iARB( g_location_useShell, 0);
-
-		glUniform3fARB( g_location_color, lightVal[0], lightVal[1], lightVal[2]);
-
-		glUniform1fARB( g_location_meshTime, rs_realtime);
-
-		glUniform1iARB( g_location_meshFog, map_fog);
-
+		
 		glUniform1iARB(g_location_useGPUanim, 0);
 
 		if (dovbo)
@@ -1678,11 +1687,11 @@ void MD2_DrawFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped, int skin
 
 		if(dovbo)
 		{
-            vbo_xyz = R_VCLoadData(VBO_STATIC, va*sizeof(vec3_t), VertexArray, VBO_STORE_XYZ, currentmodel);
+			vbo_xyz = R_VCLoadData(VBO_STATIC, va*sizeof(vec3_t), VertexArray, VBO_STORE_XYZ, currentmodel);
 			vbo_st = R_VCLoadData(VBO_STATIC, va*sizeof(vec2_t), TexCoordArray, VBO_STORE_ST, currentmodel);
 			vbo_normals = R_VCLoadData(VBO_STATIC, va*sizeof(vec3_t), NormalsArray, VBO_STORE_NORMAL, currentmodel);
 			vbo_tangents = R_VCLoadData(VBO_STATIC, va*sizeof(vec4_t), TangentsArray, VBO_STORE_TANGENT, currentmodel);
-        }
+		}
 skipLoad:
 		if(dovbo) 
 		{
@@ -1701,9 +1710,9 @@ skipLoad:
 			glEnableVertexAttribArrayARB (1);
 			GL_BindVBO(vbo_tangents);
 			glVertexAttribPointerARB(1, 4, GL_FLOAT, GL_FALSE, sizeof(vec4_t), 0);
-	    }
-        
-        if (!(!cl_gun->integer && ( currententity->flags & RF_WEAPONMODEL )))
+		}
+		
+		if (!(!cl_gun->integer && ( currententity->flags & RF_WEAPONMODEL )))
 			R_DrawVarrays(GL_TRIANGLES, 0, paliashdr->num_tris*3);
 
 		glUseProgramObjectARB( 0 );
@@ -1927,7 +1936,7 @@ void R_DrawAliasModel ( void )
 		qglDepthRange (gldepthmin, gldepthmin + 0.3*(gldepthmax-gldepthmin));
 
 	if ((currententity->flags & RF_WEAPONMODEL) && r_lefthand->integer != 2)
-    {
+	{
 		qglMatrixMode(GL_PROJECTION);
 		qglPushMatrix();
 		qglLoadIdentity();
@@ -1943,9 +1952,9 @@ void R_DrawAliasModel ( void )
 			MYgluPerspective(75.0f, (float)r_newrefdef.width / (float)r_newrefdef.height, 4.0f, 4096.0f);
 
 		qglMatrixMode(GL_MODELVIEW);
-    }
+	}
 
-    qglPushMatrix ();
+	qglPushMatrix ();
 	currententity->angles[PITCH] = -currententity->angles[PITCH];	// sigh.
 	R_RotateForEntity (currententity);
 	currententity->angles[PITCH] = -currententity->angles[PITCH];	// sigh.
@@ -2043,8 +2052,8 @@ void R_DrawAliasModel ( void )
 		qglDisable(GL_TEXTURE_GEN_T);
 		qglDisable (GL_BLEND);
 		qglBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        qglColor4f(1,1,1,1);
-	    qglTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+		qglColor4f(1,1,1,1);
+		qglTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
 	}
 	if (currententity->flags & RF_DEPTHHACK)
@@ -2053,7 +2062,7 @@ void R_DrawAliasModel ( void )
 	qglColor4f (1,1,1,1);
 
 	if(r_minimap->integer)
-    {
+	{
 	   if ( currententity->flags & RF_MONSTER)
 	   {
 			RadarEnts[numRadarEnts].color[0]= 1.0;
@@ -2061,7 +2070,7 @@ void R_DrawAliasModel ( void )
 			RadarEnts[numRadarEnts].color[2]= 2.0;
 			RadarEnts[numRadarEnts].color[3]= 1.0;
 		}
-	    else
+		else
 			return;
 
 		VectorCopy(currententity->origin,RadarEnts[numRadarEnts].org);
@@ -2174,7 +2183,7 @@ void MD2_DrawCasterFrame (dmdl_t *paliashdr, float backlerp, qboolean lerped)
 	if(gl_state.vbo && !lerped)
 	{
 		vbo_xyz = R_VCLoadData(VBO_STATIC, va*sizeof(vec3_t), VertexArray, VBO_STORE_XYZ, currentmodel);
-    }
+	}
 
 skipLoad:
 	if(gl_state.vbo && !lerped) 
@@ -2182,8 +2191,8 @@ skipLoad:
 		qglEnableClientState( GL_VERTEX_ARRAY );
 		GL_BindVBO(vbo_xyz);
 		qglVertexPointer(3, GL_FLOAT, 0, 0);   
-    }
-    
+	}
+	
 	R_DrawVarrays(GL_TRIANGLES, 0, paliashdr->num_tris*3);
 
 	R_KillVArrays ();
@@ -2211,7 +2220,7 @@ void MD2_DrawCaster ( void )
 
 	// draw it
 
-    qglPushMatrix ();
+	qglPushMatrix ();
 	currententity->angles[PITCH] = -currententity->angles[PITCH];
 	R_RotateForEntity (currententity);
 	currententity->angles[PITCH] = -currententity->angles[PITCH];

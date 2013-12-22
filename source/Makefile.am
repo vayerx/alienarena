@@ -152,7 +152,6 @@ alienarena_SOURCES = \
 	client/snd_openal.c \
 	client/sound.h \
 	client/vid.h \
-	client/vid_menu.c \
 	game/game.h \
 	game/q_shared.c \
 	game/q_shared.h \
@@ -177,8 +176,6 @@ alienarena_SOURCES = \
 	ref_gl/glext.h \
 	ref_gl/qgl.h \
 	ref_gl/r_bloom.c \
-	ref_gl/r_bmfont.c \
-	ref_gl/r_bmfont.h \
 	ref_gl/r_draw.c \
 	ref_gl/r_image.c \
 	ref_gl/r_image.h \
@@ -232,7 +229,6 @@ alienarena_SOURCES += \
 	unix/glw_unix.h \
 	unix/net_udp.c \
 	unix/qal_unix.c \
-	unix/qasm.h \
 	unix/qgl_unix.c \
 	unix/q_shunix.c \
 	unix/rw_unix.c \

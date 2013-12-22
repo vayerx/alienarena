@@ -46,6 +46,7 @@ void Weapon_Bomber (edict_t *ent);
 void Weapon_Strafer (edict_t *ent);
 void Weapon_Deathball (edict_t *ent);
 void Weapon_Hover (edict_t *ent);
+void Weapon_TacticalBomb ( edict_t *ent);
 #endif
 
 gitem_armor_t jacketarmor_info	= { 25,  50, .30, .00, ARMOR_JACKET};
@@ -499,6 +500,11 @@ qboolean Add_Ammo (edict_t *ent, gitem_t *item, int count, qboolean weapon, qboo
 		max = ent->client->pers.max_seekers;
 		base = BASE_SEEKERS;
 	}
+	else if (item->tag == AMMO_BOMBS) 
+	{
+		max = ent->client->pers.max_bombs;
+		base = BASE_BOMBS;
+	}
 	else
 		return false;
 
@@ -554,7 +560,37 @@ qboolean Pickup_Ammo (edict_t *ent, edict_t *other)
 	}
 
 	if (!(ent->spawnflags & (DROPPED_ITEM | DROPPED_PLAYER_ITEM)) && (deathmatch->integer))
-		SetRespawn (ent, 30);
+	{
+		if(g_tactical->integer)
+		{
+			if(!strcmp(ent->classname, "ammo_cells") || !strcmp(ent->classname, "ammo_shells"))
+			{
+				if(!tacticalScore.alienPowerSource)
+				{
+					if(tacticalScore.alienBackupGen)
+						SetRespawn (ent, 20); //on backup power, generate ammo much slower
+					else
+						SetRespawn (ent, 40); //for the most part, dead
+				}
+				else
+					SetRespawn (ent, 5);
+			}
+			else if(!strcmp(ent->classname, "ammo_rockets") || !strcmp(ent->classname, "ammo_bullets") || !strcmp(ent->classname, "ammo_grenades"))
+			{
+				if(!tacticalScore.humanPowerSource)
+				{
+					if(tacticalScore.humanBackupGen)
+						SetRespawn (ent, 20);
+					else
+						SetRespawn (ent, 40);
+				}
+				else
+					SetRespawn (ent, 5);
+			}
+		}
+		else
+			SetRespawn (ent, 30);
+	}
 
 	return true;
 }
@@ -802,9 +838,14 @@ void Touch_Item (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf
 	if (!taken)
 		return;
 
-	if(g_tactical->integer) //items do not respawn in tactical mode
+	if(g_tactical->integer) //items do not respawn in tactical mode(except ammo when ammo depots are running)
 	{
-		G_FreeEdict (ent);
+		if((!strcmp(ent->classname, "ammo_cells") || !strcmp(ent->classname, "ammo_shells")) && tacticalScore.alienAmmoDepot)
+			return;
+		else if((!strcmp(ent->classname, "ammo_rockets") || !strcmp(ent->classname, "ammo_bullets") || !strcmp(ent->classname, "ammo_grenades")) && tacticalScore.humanAmmoDepot)
+			return;
+
+		G_FreeEdict (ent); 
 		return;
 	}
 
@@ -1369,6 +1410,49 @@ gitem_t	itemlist[] =
 		NULL
 	},
 
+//Tactical bombs
+	{
+		"item_alien_bomb",
+		NULL, //Pickup_alienBomb, //only owner will be able to pick this item back up
+		Use_Weapon,
+		NULL, 
+		Weapon_TacticalBomb, //fire out bomb, not too far, like prox mines 
+		NULL,
+		"models/tactical/alien_bomb.iqm", 0,
+		"vehicles/deathball/v_wep.md2", //will use db's vweap for bombs and detonators
+/* icon */		"abomb", 
+/* pickup */	"Alien Bomb",
+		0,
+		1,
+		"bombs",
+		IT_WEAPON,
+		WEAP_ABOMB,
+		NULL,
+		0,
+		NULL
+	},
+
+	{
+		"item_human_bomb",
+		NULL, //Pickup_humanBomb, //only owner will be able to pick this item back up
+		Use_Weapon,
+		NULL, 
+		Weapon_TacticalBomb, //fire out bomb, not too far, like prox mines 
+		NULL,
+		"models/tactical/human_bomb.iqm", 0,
+		"vehicles/deathball/v_wep.md2", //will use db's vweap for bombs and detonators
+/* icon */		"abomb", 
+/* pickup */	"Human Bomb",
+		0,
+		1,
+		"bombs",
+		IT_WEAPON,
+		WEAP_HBOMB,
+		NULL,
+		0,
+		NULL
+	},
+
 /*QUAKED item_deathball (1 0.2 0) (-16 -16 -24) (16 16 32)
 */
 	{
@@ -1393,7 +1477,7 @@ gitem_t	itemlist[] =
 	},
 
 	//a fake item for bots to use as a target for throwing a deathball at.
-		{
+	{
 		"item_dbtarget",
 		NULL,
 		NULL,
@@ -1936,6 +2020,28 @@ always owned, never in the world
 		0,
 		NULL,
 		AMMO_SEEKERS,
+/* precache */ ""
+	},
+
+	{
+		"ammo_bombs",
+		Pickup_Ammo, //set to null
+		NULL,
+		Drop_Ammo, //set to null
+		NULL,
+		"misc/am_pkup.wav",
+		NULL,
+		0,
+		NULL,
+/* icon */		"a_bombs",
+/* pickup */	"Bombs",
+/* width */		3,
+		1,
+		NULL,
+		IT_AMMO,
+		0,
+		NULL,
+		AMMO_BOMBS,
 /* precache */ ""
 	},
 

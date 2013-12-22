@@ -264,7 +264,7 @@ SV_InitGameProgs
 Init the game subsystem for a new map
 ===============
 */
-void SCR_DebugGraph (float value, int color);
+void SCR_DebugGraph (float value, const float color[]);
 
 void SV_InitGameProgs (void)
 {
@@ -297,6 +297,10 @@ void SV_InitGameProgs (void)
 	import.modelindex = SV_ModelIndex;
 	import.soundindex = SV_SoundIndex;
 	import.imageindex = SV_ImageIndex;
+	
+	import.checkmodelindex = SV_CheckModelIndex;
+	import.checksoundindex = SV_CheckSoundIndex;
+	import.checkimageindex = SV_CheckImageIndex;
 
 	import.configstring = PF_Configstring;
 	import.sound = PF_StartSound;

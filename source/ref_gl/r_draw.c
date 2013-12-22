@@ -108,105 +108,6 @@ void Draw_InitLocal (void)
 	RefreshFont();
 }
 
-static byte R_FloatToByte( float x )
-{
-	union {
-		float			f;
-		unsigned int	i;
-	} f2i;
-
-	// shift float to have 8bit fraction at base of number
-	f2i.f = x + 32768.0f;
-	f2i.i &= 0x7FFFFF;
-
-	// then read as integer and kill float bits...
-	return ( byte )min( f2i.i, 255 );
-}
-
-void Draw_ScaledChar (float x, float y, int num, float scale, int from_menu)
-
-{
-	int				row, col;
-	float			frow, fcol, size;
-
-	num &= 255;
-
-	if ( (num&127) == 32 )
-		return;		// space
-
-	if (y <= -8)
-		return;			// totally off screen
-
-	row = num>>4;
-	col = num&15;
-
-	frow = row*0.0625;
-	fcol = col*0.0625;
-	size = 0.0625;
-
-	if(from_menu)
-		GL_Bind(menu_chars->texnum);
-	else
-		GL_Bind(draw_chars->texnum);
-
-	qglColor4f( 1,1,1,1 );
-	qglBegin (GL_QUADS);
-	qglTexCoord2f (fcol, frow);
-	qglVertex2f (x, y);
-	qglTexCoord2f (fcol + size, frow);
-	qglVertex2f (x+scale, y);
-	qglTexCoord2f (fcol + size, frow + size);
-	qglVertex2f (x+scale, y+scale);
-	qglTexCoord2f (fcol, frow + size);
-	qglVertex2f (x, y+scale);
-	qglEnd();
-
-}
-void Draw_ScaledColorChar (float x, float y, int num, vec4_t color, float scale, int from_menu)
-{
-	int				row, col;
-	float			frow, fcol, size;
-	byte			colors[4];
-
-	colors[0] = R_FloatToByte( color[0] );
-	colors[1] = R_FloatToByte( color[1] );
-	colors[2] = R_FloatToByte( color[2] );
-	colors[3] = R_FloatToByte( color[3] );
-
-	num &= 255;
-
-	if ( (num&127) == 32 )
-		return;		// space
-
-	if (y <= -8)
-		return;			// totally off screen
-
-	row = num>>4;
-	col = num&15;
-
-	frow = row*0.0625;
-	fcol = col*0.0625;
-	size = 0.0625;
-
-	if(from_menu)
-		GL_Bind(menu_chars->texnum);
-	else
-		GL_Bind(draw_chars->texnum);
-
-	qglColor4ubv( colors );
-	GL_TexEnv(GL_MODULATE);
-	qglBegin (GL_QUADS);
-	qglTexCoord2f (fcol, frow);
-	qglVertex2f (x, y);
-	qglTexCoord2f (fcol + size, frow);
-	qglVertex2f (x+scale, y);
-	qglTexCoord2f (fcol + size, frow + size);
-	qglVertex2f (x+scale, y+scale);
-	qglTexCoord2f (fcol, frow + size);
-	qglVertex2f (x, y+scale);
-	qglEnd ();
-	qglColor4f( 1,1,1,1 );
-}
 /*
 =============
 R_RegisterPic
@@ -309,13 +210,23 @@ image_t	*R_RegisterPlayerIcon (const char *name)
 
 	return gl;
 }
+
+/*
+=============
+Draw_PicExists
+=============
+*/
+qboolean Draw_PicExists (const char *pic)
+{
+	return R_RegisterPic (pic) != NULL;
+}
+
 /*
 =============
 Draw_GetPicSize
 =============
 */
-
-void Draw_GetPicSize (int *w, int *h, char *pic)
+void Draw_GetPicSize (int *w, int *h, const char *pic)
 {
 	image_t *gl;
 
@@ -333,23 +244,32 @@ void Draw_GetPicSize (int *w, int *h, char *pic)
 /*
 =============
 Draw_AlphaStretchPic
+- Note: If tiling is true, the texture wrapping flags are adjusted to prevent
+        gaps from appearing if the texture is tiled with itself or with other
+        textures. This adjustment is permanent, although it would be easy to
+        change the code to undo it after rendering.
 =============
 */
-void Draw_AlphaStretchImage (int x, int y, int w, int h, image_t *gl, float alphaval)
+enum draw_tiling_s
 {
-	rscript_t *rs = NULL;
+	draw_without_tiling,
+	draw_with_tiling
+};
+void Draw_AlphaStretchImage (float x, float y, float w, float h, const image_t *gl, float alphaval, enum draw_tiling_s tiling)
+{
+	rscript_t *rs;
 	float	alpha,s,t;
 	rs_stage_t *stage;
 	char shortname[MAX_QPATH];
 	float xscale, yscale;
 	float cropped_x, cropped_y, cropped_w, cropped_h;
-	float sl, tl, sh, th;
 	
 	if (scrap_dirty)
 		Scrap_Upload ();
 	
 	COM_StripExtension ( gl->name, shortname );
-	rs=RS_FindScript(shortname);
+	
+	rs = gl->script;
 
 	//if we draw the red team bar, we are on red team
 	if(!strcmp(shortname, "pics/i_team1"))
@@ -373,19 +293,14 @@ void Draw_AlphaStretchImage (int x, int y, int w, int h, image_t *gl, float alph
 		cropped_x = x + xscale*(float)gl->crop_left;
 		cropped_y = y + yscale*(float)gl->crop_top;
 	
-		cropped_w = w - xscale*(float)(gl->crop_right + gl->crop_left);
-		cropped_h = h - yscale*(float)(gl->crop_bottom + gl->crop_top);
+		cropped_w = xscale*(float)gl->crop_width; 
+		cropped_h = yscale*(float)gl->crop_height;
 		
 		VA_SetElem2(vert_array[0], cropped_x,			cropped_y);
 		VA_SetElem2(vert_array[1], cropped_x+cropped_w, cropped_y);
 		VA_SetElem2(vert_array[2], cropped_x+cropped_w, cropped_y+cropped_h);
 		VA_SetElem2(vert_array[3], cropped_x,			cropped_y+cropped_h);
 	
-		sl = gl->sl + (float)gl->crop_left/(float)gl->upload_width;
-		tl = gl->tl + (float)gl->crop_top/(float)gl->upload_height;
-		sh = gl->sh - (float)gl->crop_right/(float)gl->upload_width;
-		th = gl->th - (float)gl->crop_bottom/(float)gl->upload_height;
-
 		qglColor4f(1,1,1, alphaval);
 
 		//set color of hud by team
@@ -403,13 +318,20 @@ void Draw_AlphaStretchImage (int x, int y, int w, int h, image_t *gl, float alph
 		VA_SetElem4(col_array[2], 1,1,1,1);
 		VA_SetElem4(col_array[3], 1,1,1,1);
 		GL_Bind (gl->texnum);
-		VA_SetElem2(tex_array[0], sl, tl);
-		VA_SetElem2(tex_array[1], sh, tl);
-		VA_SetElem2(tex_array[2], sh, th);
-		VA_SetElem2(tex_array[3], sl, th);
+		if (tiling == draw_with_tiling)
+		{
+			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+		}
+		VA_SetElem2(tex_array[0], gl->crop_sl, gl->crop_tl);
+		VA_SetElem2(tex_array[1], gl->crop_sh, gl->crop_tl);
+		VA_SetElem2(tex_array[2], gl->crop_sh, gl->crop_th);
+		VA_SetElem2(tex_array[3], gl->crop_sl, gl->crop_th);
 		R_DrawVarrays (GL_QUADS, 0, 4);
 		qglEnable (GL_ALPHA_TEST);
 		qglDisable (GL_BLEND);
+		GLSTATE_DISABLE_BLEND
+		GLSTATE_ENABLE_ALPHATEST
 		R_KillVArrays();
 	}
 	else
@@ -512,12 +434,7 @@ void Draw_AlphaStretchImage (int x, int y, int w, int h, image_t *gl, float alph
 	}
 }
 
-/*
-=============
-Draw_AlphaStretchPic
-=============
-*/
-void Draw_AlphaStretchPic (int x, int y, int w, int h, char *pic, float alphaval)
+void Draw_AlphaStretchTilingPic (float x, float y, float w, float h, const char *pic, float alphaval)
 {
 	image_t *gl;
 
@@ -527,7 +444,25 @@ void Draw_AlphaStretchPic (int x, int y, int w, int h, char *pic, float alphaval
 		return;
 	}
 	
-	Draw_AlphaStretchImage (x, y, w, h, gl, alphaval);
+	Draw_AlphaStretchImage (x, y, w, h, gl, alphaval, draw_with_tiling);
+}
+
+/*
+=============
+Draw_AlphaStretchPic
+=============
+*/
+void Draw_AlphaStretchPic (float x, float y, float w, float h, const char *pic, float alphaval)
+{
+	image_t *gl;
+
+	gl = R_RegisterPic (pic);
+	if (!gl)
+	{
+		return;
+	}
+	
+	Draw_AlphaStretchImage (x, y, w, h, gl, alphaval, draw_without_tiling);
 }
 
 /*
@@ -535,7 +470,7 @@ void Draw_AlphaStretchPic (int x, int y, int w, int h, char *pic, float alphaval
 Draw_StretchPic
 =============
 */
-void Draw_StretchPic (int x, int y, int w, int h, char *pic)
+void Draw_StretchPic (float x, float y, float w, float h, const char *pic)
 {
 	Draw_AlphaStretchPic (x, y, w, h, pic, DIV254BY255);
 }
@@ -545,7 +480,7 @@ void Draw_StretchPic (int x, int y, int w, int h, char *pic)
 Draw_ScaledPic
 =============
 */
-void Draw_ScaledPic (int x, int y, float scale, char *pic)
+void Draw_ScaledPic (float x, float y, float scale, const char *pic)
 {
 	image_t *gl;
 	float w, h;
@@ -559,7 +494,7 @@ void Draw_ScaledPic (int x, int y, float scale, char *pic)
 	w = (float)gl->width*scale;
 	h = (float)gl->height*scale;
 	
-	Draw_AlphaStretchImage (x, y, w, h, gl, DIV254BY255);
+	Draw_AlphaStretchImage (x, y, w, h, gl, DIV254BY255, draw_without_tiling);
 }
 
 /*
@@ -567,7 +502,7 @@ void Draw_ScaledPic (int x, int y, float scale, char *pic)
 Draw_Pic
 =============
 */
-void Draw_Pic (int x, int y, char *pic)
+void Draw_Pic (float x, float y, const char *pic)
 {
 	Draw_ScaledPic (x, y, 1.0, pic);
 }
@@ -577,7 +512,7 @@ void Draw_Pic (int x, int y, char *pic)
 Draw_AlphaStretchPlayerIcon
 =============
 */
-void Draw_AlphaStretchPlayerIcon (int x, int y, int w, int h, char *pic, float alphaval)
+void Draw_AlphaStretchPlayerIcon (int x, int y, int w, int h, const char *pic, float alphaval)
 {
 	image_t *gl;
 
@@ -587,8 +522,7 @@ void Draw_AlphaStretchPlayerIcon (int x, int y, int w, int h, char *pic, float a
 		return;
 	}
 
-	Draw_AlphaStretchImage (x, y, w, h, gl, alphaval);
-	return; 
+	Draw_AlphaStretchImage (x, y, w, h, gl, alphaval, draw_without_tiling);
 }
 
 
@@ -599,42 +533,32 @@ Draw_Fill
 Fills a box of pixels with a single color
 =============
 */
-void Draw_Fill (int x, int y, int w, int h, int c)
+void Draw_Fill (float x, float y, float w, float h, const float rgba[])
 {
-	union
-	{
-		unsigned	c;
-		byte		v[4];
-	} color;
-
-	if ( (unsigned)c > 255)
-		Com_Error (ERR_FATAL, "Draw_Fill: bad color");
-
 	qglDisable (GL_TEXTURE_2D);
-
-	color.c = d_8to24table[c];
-	qglColor3f (color.v[0]/255.0,
-		color.v[1]/255.0,
-		color.v[2]/255.0);
-
+	// FIXME HACK
+	qglDisable (GL_ALPHA_TEST);
+	qglEnable (GL_BLEND);
+	GLSTATE_ENABLE_BLEND;
+	GLSTATE_DISABLE_ALPHATEST;
+	qglColor4fv (rgba);
+	
 	qglBegin (GL_QUADS);
-
-	qglVertex2f (x,y);
-	qglVertex2f (x+w, y);
-	qglVertex2f (x+w, y+h);
-	qglVertex2f (x, y+h);
-
+		qglVertex2f (x,y);
+		qglVertex2f (x+w, y);
+		qglVertex2f (x+w, y+h);
+		qglVertex2f (x, y+h);
 	qglEnd ();
+	
+	GLSTATE_DISABLE_BLEND;
 	qglColor3f (1,1,1);
 	qglEnable (GL_TEXTURE_2D);
 }
-
 //=============================================================================
 
 /*
 ================
 Draw_FadeScreen
-
 ================
 */
 void Draw_FadeScreen (void)
@@ -656,3 +580,22 @@ void Draw_FadeScreen (void)
 }
 
 
+//=============================================================================
+
+/*
+================
+RGBA - This really should be a macro, but MSVC doesn't support C99.
+================
+*/
+
+float *RGBA (float r, float g, float b, float a)
+{
+	static float ret[4];
+	
+	ret[0] = r;
+	ret[1] = g;
+	ret[2] = b;
+	ret[3] = a;
+	
+	return ret;
+}

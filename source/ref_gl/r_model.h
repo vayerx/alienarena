@@ -112,7 +112,7 @@ typedef struct
 //base player models and weapons for prechache
 typedef struct PModelList_s {
 
-    const char *name;
+    char *name;
 
 } PModelList_t;
 
@@ -121,7 +121,7 @@ extern int PModelsCount;
 
 typedef struct WModelList_s {
 
-    const char *name;
+    char *name;
 
 } WModelList_t;
 
@@ -251,6 +251,9 @@ typedef struct msurface_s
 	struct	msurface_s	*texturechain;
 	struct	msurface_s	*rscriptchain;
 	
+	//texture chain for lightstyle updating
+	struct	msurface_s	*flickerchain;
+	
 	vec3_t mins;
 	vec3_t maxs;
 
@@ -264,6 +267,9 @@ typedef struct msurface_s
 // lighting info
 	int			dlightframe;
 	int			dlightbits;
+	
+	int			lightmins[2];
+	int			lightmaxs[2];
 
 	int			lightmaptexturenum;
 	byte		styles[MAXLIGHTMAPS];

@@ -79,14 +79,14 @@ void CL_RunLightStyles (void)
 	int		i;
 	clightstyle_t	*ls;
 
-	ofs = cl.time / 100;
+	ofs = cl.time / 25;
 	if (ofs == lastofs)
 		return;
 	lastofs = ofs;
 
 	for (i=0,ls=cl_lightstyle ; i<MAX_LIGHTSTYLES ; i++, ls++)
 	{
-		if (!ls->length)
+		if (!ls->length || !cl_flicker->integer)
 		{
 			ls->value[0] = ls->value[1] = ls->value[2] = 1.0;
 			continue;
@@ -94,7 +94,17 @@ void CL_RunLightStyles (void)
 		if (ls->length == 1)
 			ls->value[0] = ls->value[1] = ls->value[2] = ls->map[0];
 		else
-			ls->value[0] = ls->value[1] = ls->value[2] = ls->map[ofs%ls->length];
+		{
+			// nonlinear interpolation of the lightstyles for smoothness while
+			// still preserving some "jaggedness"
+			float a, b, dist;
+			a = ls->map[(ofs/4)%ls->length];
+			b = ls->map[(ofs/4+1)%ls->length];
+			dist = (float)(ofs%4)/4.0f;
+			if (dist != 0.75)
+				dist = 0;
+			ls->value[0] = ls->value[1] = ls->value[2] = a+(b-a)*dist;
+		}
 	}
 }
 
@@ -910,27 +920,7 @@ void CL_LaserSparks (vec3_t org, vec3_t dir, int color, int count)
 			dir[i] -= frand();
 	}
 
-	//draw a fatter glow at the impact point
-	if(!(p = new_particle()))
-		return;
-	p->color = color + (rand()&2);
-	for (j=0 ; j<3 ; j++)
-	{
-		p->org[j] = org[j];
-		p->vel[j] = 0;
-	}
-	p->accel[0] = p->accel[1] = 0;
-	p->accel[2] = -(PARTICLE_GRAVITY);
-	p->alpha = .5;
-
-	p->alphavel = -1.0 / (1 + frand()*0.3);
-
-	addParticleLight (p,
-						p->scale*10, 10,
-					0, 1, 0);
-
 	//shoot off sparks
-
 	for( k=0; k<2; k++) {
 
 		VectorNormalize(dir);
@@ -982,6 +972,12 @@ void CL_LogoutEffect (vec3_t org, int type)
 	{
 		if (!(p = new_particle()))
 			return;
+		
+		p->type = PARTICLE_STANDARD;
+		p->scale = 1;
+		p->image = r_particletexture;
+		p->blendsrc = GL_SRC_ALPHA;
+		p->blenddst = GL_ONE;
 
 		if (type == MZ_LOGIN)
 			p->color = 0xd0 + (rand()&7);	// green
@@ -1896,29 +1892,7 @@ void CL_FlagEffects(vec3_t pos, qboolean team)
 	}
 	p->org[2] += 64;
 
-		if (!(p = new_particle()))
-		return;
 
-	VectorClear (p->accel);
-
-	p->alpha = 1.0;
-	p->type = PARTICLE_ROTATINGYAWMINUS;
-	p->image = r_flagtexture;
-	p->blendsrc = GL_ONE;
-	p->blenddst = GL_ONE;
-	if(team)
-		p->color = 0x74;
-	else
-		p->color = 0xe8;
-	p->scale = 15;
-	p->alphavel = INSTANT_PARTICLE;
-	for (i=0 ; i<3 ; i++)
-	{
-		p->org[i] = pos[i];
-		p->vel[i] = 0;
-		p->accel[i] = 0;
-	}
-	p->org[2] += 64;
 
 	if (!(p = new_particle()))
 			return;
@@ -1932,8 +1906,6 @@ void CL_FlagEffects(vec3_t pos, qboolean team)
 		p->color = 0x74;
 	else
 		p->color = 0xe8;
-
-
 
 	angle = M_PI*2*(rand()&1023)/1023.0;
 	dist = rand()&5;

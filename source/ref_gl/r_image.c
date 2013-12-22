@@ -45,8 +45,8 @@ extern cvar_t	*cl_hudimage2;
 
 unsigned	d_8to24table[256];
 
-qboolean GL_Upload8 (byte *data, int width, int height, qboolean filter);
-qboolean GL_Upload32 (unsigned *data, int width, int height, qboolean filter, qboolean force_standard_mipmap);
+qboolean GL_Upload8 (byte *data, int width, int height, int picmip, qboolean filter);
+qboolean GL_Upload32 (byte *data, int width, int height, int picmip, qboolean filter, qboolean force_standard_mipmap);
 
 int		gl_solid_format = 3;
 int		gl_alpha_format = 4;
@@ -125,7 +125,7 @@ void R_InitImageSubsystem(void)
 		if (r_alphamasked_anisotropic->integer <= 0)
 			Cvar_SetValue("r_alphamasked_anisotropic", 1);
 
-		if (r_anisotropic->integer == 1 && r_alphamasked_anisotropic == 1)
+		if (r_anisotropic->integer == 1 && r_alphamasked_anisotropic->integer == 1)
 			Com_Printf("...ignoring GL_EXT_texture_filter_anisotropic\n");
 		else
 			Com_Printf("...using GL_EXT_texture_filter_anisotropic\n");
@@ -162,6 +162,14 @@ void GL_ShadeModel (GLenum mode)
 		qglShadeModel(mode);
 	}
 }
+
+// FIXME:
+// This centralized texture bind batching system is a great idea if you use it
+// *everywhere*. Otherwise you just end up binding a texture elsewhere and
+// this system doesn't know you've done it, so when you count on this system
+// to bindanother texture, it doesn't know it has to, and it'll happily let
+// you use the wrong texture. Anywhere we use glActiveTexture and 
+// glBindTexture directly can potentially screw things up. 
 
 void GL_EnableMultitexture( qboolean enable )
 {
@@ -521,7 +529,7 @@ int	scrap_uploads;
 void Scrap_Upload (void)
 {
 	GL_Bind(TEXNUM_SCRAPS);
-	GL_Upload32 ((unsigned *)scrap_texels[scrap_uploads++], BLOCK_WIDTH, BLOCK_HEIGHT, false, true);
+	GL_Upload32 (scrap_texels[scrap_uploads++], BLOCK_WIDTH, BLOCK_HEIGHT, 0, false, true);
 	scrap_dirty = false;
 }
 
@@ -1120,10 +1128,10 @@ void R_FloodFillSkin( byte *skin, int skinwidth, int skinheight )
 GL_ResampleTexture
 ================
 */
-void GL_ResampleTexture (unsigned *in, int inwidth, int inheight, unsigned *out,  int outwidth, int outheight)
+void GL_ResampleTexture (byte *in, int inwidth, int inheight, byte *out, int outwidth, int outheight)
 {
 	int		i, j;
-	unsigned	*inrow, *inrow2;
+	byte	*inrow, *inrow2;
 	unsigned	frac, fracstep;
 	unsigned	p1[1024], p2[1024];
 	byte		*pix1, *pix2, *pix3, *pix4;
@@ -1143,21 +1151,21 @@ void GL_ResampleTexture (unsigned *in, int inwidth, int inheight, unsigned *out,
 		frac += fracstep;
 	}
 
-	for (i=0 ; i<outheight ; i++, out += outwidth)
+	for (i=0 ; i<outheight ; i++, out += outwidth*4)
 	{
-		inrow = in + inwidth*(int)((i+0.25)*inheight/outheight);
-		inrow2 = in + inwidth*(int)((i+0.75)*inheight/outheight);
+		inrow = in + 4*inwidth*(int)((i+0.25)*inheight/outheight);
+		inrow2 = in + 4*inwidth*(int)((i+0.75)*inheight/outheight);
 		frac = fracstep >> 1;
 		for (j=0 ; j<outwidth ; j++)
 		{
-			pix1 = (byte *)inrow + p1[j];
-			pix2 = (byte *)inrow + p2[j];
-			pix3 = (byte *)inrow2 + p1[j];
-			pix4 = (byte *)inrow2 + p2[j];
-			((byte *)(out+j))[0] = (pix1[0] + pix2[0] + pix3[0] + pix4[0])>>2;
-			((byte *)(out+j))[1] = (pix1[1] + pix2[1] + pix3[1] + pix4[1])>>2;
-			((byte *)(out+j))[2] = (pix1[2] + pix2[2] + pix3[2] + pix4[2])>>2;
-			((byte *)(out+j))[3] = (pix1[3] + pix2[3] + pix3[3] + pix4[3])>>2;
+			pix1 = inrow + p1[j];
+			pix2 = inrow + p2[j];
+			pix3 = inrow2 + p1[j];
+			pix4 = inrow2 + p2[j];
+			*(out+4*j+0) = (pix1[0] + pix2[0] + pix3[0] + pix4[0])>>2;
+			*(out+4*j+1) = (pix1[1] + pix2[1] + pix3[1] + pix4[1])>>2;
+			*(out+4*j+2) = (pix1[2] + pix2[2] + pix3[2] + pix4[2])>>2;
+			*(out+4*j+3) = (pix1[3] + pix2[3] + pix3[3] + pix4[3])>>2;
 		}
 	}
 }
@@ -1169,9 +1177,8 @@ Applies brightness and contrast to the specified image while optionally computin
 the image's average color.  Also handles image inversion and monochrome.  This is
 all munged into one function to reduce loops on level load.
 */
-void R_FilterTexture(unsigned *in, int width, int height)
+void R_FilterTexture(byte *in, int width, int height)
 {
-	byte *pcb;
 	int count;
 	float fcb;
 	int ix;
@@ -1204,16 +1211,15 @@ void R_FilterTexture(unsigned *in, int width, int height)
 	}
 
 	// apply to image
-	pcb = (byte*)in;
 	count = width * height;
 	while ( count-- ) {
-		*pcb = lut[*pcb];
-		++pcb;
-		*pcb = lut[*pcb];
-		++pcb;
-		*pcb = lut[*pcb];
-		++pcb;
-		++pcb;
+		*in = lut[*in];
+		++in;
+		*in = lut[*in];
+		++in;
+		*in = lut[*in];
+		++in;
+		++in;
 	}
 
 }
@@ -1227,7 +1233,6 @@ void R_FilterTexture(unsigned *in, int width, int height)
 int GL_RecursiveGenerateAlphaMipmaps (byte *data, int width, int height, int depth)
 {
 	int			ret;
-	int			i = 0;
 	int			x, y;
 	int			newwidth, newheight;
 	int			upper_left_alpha;
@@ -1290,10 +1295,10 @@ int		crop_left, crop_right, crop_top, crop_bottom;
 qboolean	uploaded_paletted;
 
 
-qboolean GL_Upload32 (unsigned *data, int width, int height, qboolean filter, qboolean force_standard_mipmap)
+qboolean GL_Upload32 (byte *data, int width, int height, int picmip, qboolean filter, qboolean force_standard_mipmap)
 {
 	int		samples;
-	unsigned 	*scaled;
+	byte 	*scaled;
 	int		scaled_width, scaled_height;
 	int		i, c;
 	byte		*scan;
@@ -1304,7 +1309,7 @@ qboolean GL_Upload32 (unsigned *data, int width, int height, qboolean filter, qb
 
 	uploaded_paletted = false;    // scan the texture for any non-255 alpha
 	c = width*height;
-	scan = ((byte *)data) + 3;
+	scan = data + 3;
 	samples = gl_solid_format;
 	for (i=0 ; i<c ; i++, scan += 4)
 	{
@@ -1347,10 +1352,10 @@ qboolean GL_Upload32 (unsigned *data, int width, int height, qboolean filter, qb
 				break;
 		}
 		// let people sample down the world textures for speed
-	    for (i = 0; i < gl_picmip->integer; i++)
-	    {
-	    	if (scaled_width <= 1 || scaled_height <= 1)
-	    		break;
+		for (i = 0; i < picmip; i++)
+		{
+			if (scaled_width <= 1 || scaled_height <= 1)
+				break;
 			scaled_width >>= 1;
 			scaled_height >>= 1;
 		}
@@ -1440,9 +1445,9 @@ GL_Upload8
 Returns has_alpha
 ===============
 */
-qboolean GL_Upload8 (byte *data, int width, int height, qboolean filter)
+qboolean GL_Upload8 (byte *data, int width, int height, int picmip, qboolean filter)
 {
-	unsigned	trans[512*256];
+	unsigned	trans[512*256]; // contains 32 bit RGBA color
 	int			i, s;
 	int			p;
 
@@ -1476,21 +1481,21 @@ qboolean GL_Upload8 (byte *data, int width, int height, qboolean filter)
             ((byte *)&trans[i])[2] = ((byte *)&d_8to24table[p])[2];
         }
     }
-    return GL_Upload32 (trans, width, height, filter, false);
+    return GL_Upload32 ((byte*)trans, width, height, picmip, filter, false);
 }
 
 /*
 ================
-GL_LoadPic
+GL_ReservePic
 
-This is also used as an entry point for the generated r_notexture
+Find a free image_t
 ================
 */
-image_t *GL_LoadPic (char *name, byte *pic, int width, int height, imagetype_t type, int bits)
+image_t *GL_FindFreeImage (char *name, int width, int height, imagetype_t type)
 {
 	image_t		*image;
 	int			i;
-
+	
 	// find a free image_t
 	for (i=0, image=gltextures ; i<numgltextures ; i++,image++)
 	{
@@ -1520,12 +1525,37 @@ image_t *GL_LoadPic (char *name, byte *pic, int width, int height, imagetype_t t
 	image->width = width;
 	image->height = height;
 	image->type = type;
+	
+	image->texnum = TEXNUM_IMAGES + (image - gltextures);
+	
+	return image;
+}
+
+/*
+================
+GL_LoadPic
+
+This is also used as an entry point for the generated r_notexture
+================
+*/
+image_t *GL_LoadPic (char *name, byte *pic, int width, int height, imagetype_t type, int bits)
+{
+	image_t		*image;
+	int			i;
+	int			picmip;
+
+	image = GL_FindFreeImage (name, width, height, type);
 
 	if (type == it_skin && bits == 8)
 		R_FloodFillSkin(pic, width, height);
+	
+	if (type == it_particle || type == it_pic)
+		picmip = 0;
+	else
+		picmip = gl_picmip->integer;
 
-	// load little pics into the scrap
-	if (image->type == it_particle && bits != 8
+	// load little particles into the scrap
+	if (type == it_particle && bits != 8
 		&& image->width <= 128 && image->height <= 128)
 	{
 		int		x, y;
@@ -1543,7 +1573,7 @@ image_t *GL_LoadPic (char *name, byte *pic, int width, int height, imagetype_t t
 			for (j=0 ; j<image->width ; j++)
 			    for (l = 0; l < 4; l++, k++)
 				    scrap_texels[texnum][((y+i)*BLOCK_WIDTH + x + j)*4+l] = pic[k];
-		image->texnum = TEXNUM_SCRAPS + texnum;
+		image->texnum = TEXNUM_SCRAPS + texnum; // overwrite old texnum
 		image->scrap = true;
 		image->has_alpha = true;
 		image->sl = (double)(x+0.5)/(double)BLOCK_WIDTH;
@@ -1555,24 +1585,41 @@ image_t *GL_LoadPic (char *name, byte *pic, int width, int height, imagetype_t t
 	{
 nonscrap:
 		image->scrap = false;
-		image->texnum = TEXNUM_IMAGES + (image - gltextures);
 		GL_Bind(image->texnum);
 		if (bits == 8) {
-			image->has_alpha = GL_Upload8 (pic, width, height, image->type <= it_wall);
+			image->has_alpha = GL_Upload8 (pic, width, height, picmip, type <= it_wall);
 		} else {
-			image->has_alpha = GL_Upload32 ((unsigned *)pic, width, height, image->type <= it_wall, image->type >= it_bump);
+			image->has_alpha = GL_Upload32 (pic, width, height, picmip, type <= it_wall, type >= it_bump);
 		}
-		image->crop_left = crop_left;
-		image->crop_right = crop_right;
-		image->crop_top = crop_top;
-		image->crop_bottom = crop_bottom;
-		image->upload_width = upload_width;		// after power of 2 and scales
-		image->upload_height = upload_height;
+
+		if (type == it_pic)
+			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		
 		image->paletted = uploaded_paletted;
+
+		// size in pixels after power of 2 and scales
+		image->upload_width = upload_width;
+		image->upload_height = upload_height;
+		
+		// vertex offset to apply when cropping
+		image->crop_left = crop_left;
+		image->crop_top = crop_top;
+		
+		// size in pixels after cropping
+		image->crop_width = upload_width-crop_left-crop_right;
+		image->crop_height = upload_height-crop_top-crop_bottom;
+		
+		// texcoords to use when not cropping
 		image->sl = 0;
 		image->sh = 1;
 		image->tl = 0;
 		image->th = 1;
+		
+		// texcoords to use when cropping
+		image->crop_sl = 0 + (float)crop_left/(float)upload_width;
+		image->crop_sh = 1 - (float)crop_right/(float)upload_width;
+		image->crop_tl = 0 + (float)crop_top/(float)upload_height;
+		image->crop_th = 1 - (float)crop_bottom/(float)upload_height;
 	}
 
 	COMPUTE_HASH_KEY( image->hash_key, name, i );
@@ -1696,20 +1743,29 @@ image_t	*GL_FindImage (char *name, imagetype_t type)
 	pic = NULL;
 	palette = NULL;
 
-	// try to load .tga first
+	// Try to load the image with different file extensions, in the following
+	// order of decreasing preference: TGA, JPEG, PCX, and WAL.
+	
 	LoadTGA (va("%s.tga", shortname), &pic, &width, &height);
 	if (pic)
 	{
 		image = GL_LoadPic (name, pic, width, height, type, 32);
 		goto done;
 	}
+	
 	LoadJPG (va("%s.jpg", shortname), &pic, &width, &height);
 	if (pic)
 	{
 		image = GL_LoadPic (name, pic, width, height, type, 32);
 		goto done;
 	}
-	// then comes .pcx
+	
+	// TGA and JPEG are the only file types used for heightmaps and
+	// normalmaps, so if we haven't found it yet, it isn't there, and we can
+	// save ourselves a file lookup.
+	if (type == it_bump)
+		goto done;
+	
 	LoadPCX (va("%s.pcx", shortname), &pic, &palette, &width, &height);
 	if (pic)
 	{
@@ -1717,7 +1773,6 @@ image_t	*GL_FindImage (char *name, imagetype_t type)
 		goto done;
 	}
 
-	// then comes .wal
 	if (type == it_wall)
 		image = GL_LoadWal (va("%s.wal", shortname));
 
@@ -1726,6 +1781,9 @@ done:
 		free(pic);
 	if (palette)
 		free(palette);
+	
+	if (image != NULL)
+		image->script = RS_FindScript (shortname);
 
 ret_image:
 	return image;
@@ -1791,7 +1849,21 @@ int Draw_GetPalette (void)
 
 	LoadPCX ("pics/colormap.pcx", &pic, &pal, &width, &height);
 	if (!pal)
-		Com_Error (ERR_FATAL, "Couldn't load pics/colormap.pcx");
+	{
+		Com_Error (ERR_FATAL,
+				"Couldn't load pics/colormap.pcx\n"
+				"The game executable cannot find its data files. This means\n"
+				"the game is likely not installed correctly."
+				// TODO: automatically generate a list of paths where the data
+				// files should be
+#if defined UNIX_VARIANT
+				" If you\ninstalled the game from the repository of a Linux\n"
+				"distribution, please report this to ther package\n"
+				"maintainers and have them check the README for packaging\n"
+				"instructions."
+#endif //UNIX_VARIANT
+			);
+	}
 
 	for (i=0 ; i<256 ; i++)
 	{
@@ -1869,11 +1941,11 @@ void	GL_InitImages (void)
 
 	Draw_GetPalette ();
 
-	R_InitBloomTextures();//BLOOMS
 	R_InitMirrorTextures();//MIRRORS
 	R_InitDepthTextures();//DEPTH(SHADOWMAPS)
 	R_FB_InitTextures();//FULLSCREEN EFFECTS
 	R_SI_InitTextures();//SIMPLE ITEMS
+	R_InitBloomTextures();//BLOOMS
 }
 
 /*

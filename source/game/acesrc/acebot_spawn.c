@@ -941,7 +941,8 @@ void ACESP_PutClientInServer (edict_t *bot, qboolean respawn )
 	// find a spawn point
 	// do it before setting health back up, so farthest
 	// ranging doesn't count this client
-	SelectSpawnPoint (bot, spawn_origin, spawn_angles);
+	if(!g_tactical->integer)
+		SelectSpawnPoint (bot, spawn_origin, spawn_angles);
 
 	index = bot - g_edicts - 1;
 	client = bot->client;
@@ -1015,10 +1016,6 @@ void ACESP_PutClientInServer (edict_t *bot, qboolean respawn )
 	// clear playerstate values
 	memset (&bot->client->ps, 0, sizeof(client->ps));
 
-	client->ps.pmove.origin[0] = spawn_origin[0]*8;
-	client->ps.pmove.origin[1] = spawn_origin[1]*8;
-	client->ps.pmove.origin[2] = spawn_origin[2]*8;
-
 //ZOID
 	client->ps.pmove.pm_flags &= ~PMF_NO_PREDICTION;
 //ZOID
@@ -1079,27 +1076,45 @@ void ACESP_PutClientInServer (edict_t *bot, qboolean respawn )
 	Q2_FindFile (modelpath, &file);
 	if(file) 
 	{ 
+		fclose(file);
+
 		//human
 		bot->ctype = 1;
 		if(g_tactical->integer || (classbased->value && !(rocket_arena->integer || instagib->integer || insta_rockets->value || excessive->value)))
 		{
+			if(g_tactical->integer)
+			{
+				//read class file(tactical only)
+				//example:
+				//100-150 (health)
+				//0-3 (armor type)
+				//0-1 (has bomb)
+				//0-1 (has detonator)
+				//0-1 (has mind eraser)
+				//0-1 (has vaporizor)
+			
+				ParseClassFile(modelpath, bot); 
+				if(bot->has_bomb)
+				{
+					bot->client->pers.inventory[ITEM_INDEX(FindItem("Human Bomb"))] = 1;
+					bot->client->pers.inventory[ITEM_INDEX(FindItem("bombs"))] = 1; //tactical note - humans will use same ammo, etc, just different weapons
+				}				
+				item = FindItem("Blaster");
+			}
+			else
+			{
+				bot->health = bot->max_health = client->pers.max_health = client->pers.health = 100;
 				armor_index = ITEM_INDEX(FindItem("Jacket Armor"));
 				client->pers.inventory[armor_index] += 30;
-				if(g_tactical->integer)
-				{
-					item = FindItem("Blaster");
-				}
-				else
-				{
-					client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] = 1;
-					client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = 10;
-					item = FindItem("Rocket Launcher");
-				}
-				client->pers.selected_item = ITEM_INDEX(item);
-				client->pers.inventory[client->pers.selected_item] = 1;
-				client->pers.weapon = item;
+				
+				client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] = 1;
+				client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = 10;
+				item = FindItem("Rocket Launcher");				
+			}			
+			client->pers.selected_item = ITEM_INDEX(item);
+			client->pers.inventory[client->pers.selected_item] = 1;
+			client->pers.weapon = item;
 		}
-		fclose(file);
 	}
 	else 
 	{
@@ -1120,12 +1135,28 @@ void ACESP_PutClientInServer (edict_t *bot, qboolean respawn )
 		else 
 		{ 
 			//alien
+			bot->ctype = 0;
 			if(g_tactical->integer || (classbased->value && !(rocket_arena->integer || instagib->integer || insta_rockets->value || excessive->value)))
 			{
 				bot->health = bot->max_health = client->pers.max_health = client->pers.health = 150;
 				if(g_tactical->integer)
 				{
-					item = FindItem("Alien Blaster"); //To do - tactical - create new weapon for aliens to start with, another blaster type.
+					sprintf(modelpath, "players/%s/alien", playermodel);
+					Q2_FindFile (modelpath, &file);
+					if(file)
+					{
+						ParseClassFile(modelpath, bot); 		
+						if(bot->has_bomb)
+						{
+							bot->client->pers.inventory[ITEM_INDEX(FindItem("Alien Bomb"))] = 1;
+							bot->client->pers.inventory[ITEM_INDEX(FindItem("bombs"))] = 1; //tactical note - humans will use same ammo, etc, just different weapons
+						}
+					}
+					item = FindItem("Blaster");
+					client->pers.selected_item = ITEM_INDEX(item);
+					client->pers.inventory[client->pers.selected_item] = 0;					
+				
+					item = FindItem("Alien Blaster");
 				}
 				else
 				{
@@ -1135,10 +1166,18 @@ void ACESP_PutClientInServer (edict_t *bot, qboolean respawn )
 				}
 				client->pers.selected_item = ITEM_INDEX(item);
 				client->pers.inventory[client->pers.selected_item] = 1;
-				client->pers.weapon = item;
+				client->pers.weapon = item;		
 			}
 		}
 	}
+
+	//has to be done after determining the class/team - note - we don't care about spawn distances in tactical
+	if(g_tactical->integer)
+		SelectSpawnPoint (bot, spawn_origin, spawn_angles);
+	
+	client->ps.pmove.origin[0] = spawn_origin[0]*8;
+	client->ps.pmove.origin[1] = spawn_origin[1]*8;
+	client->ps.pmove.origin[2] = spawn_origin[2]*8;
 
 	bot->s.frame = 0;
 	VectorCopy (spawn_origin, bot->s.origin);
@@ -1576,6 +1615,7 @@ static void remove_bot( edict_t *bot )
 	bot->s.angles[2] = 0;  // ?
 	bot->s.sound = 0;
 	bot->client->weapon_sound = 0;
+	bot->s.effects = 0;
 
 	// remove powerups
 	bot->client->quad_framenum = 0;

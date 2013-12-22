@@ -5,6 +5,9 @@
 
 #include <math.h>
 
+// big enough without being so big we get major floating point errors.
+#define	BOGUS_RANGE	((1<<14)<<1)
+
 #ifdef DOUBLEVEC_T
 typedef double vec_t;
 #else
@@ -145,8 +148,8 @@ static __inline vec_t ColorNormalize (vec3_t in, vec3_t out)
 
 static __inline void ClearBounds (vec3_t mins, vec3_t maxs)
 {
-	mins[0] = mins[1] = mins[2] = 99999;
-	maxs[0] = maxs[1] = maxs[2] = -99999;
+	mins[0] = mins[1] = mins[2] = BOGUS_RANGE;
+	maxs[0] = maxs[1] = maxs[2] = -BOGUS_RANGE;
 }
 
 static __inline void AddPointToBounds (vec3_t v, vec3_t mins, vec3_t maxs)

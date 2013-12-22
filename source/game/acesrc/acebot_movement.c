@@ -910,7 +910,8 @@ void ACEMV_Attack (edict_t *self, usercmd_t *ucmd)
 
 	vehicle = FindItemByClassname("item_bomber");
 
-	if (self->client->pers.inventory[ITEM_INDEX(vehicle)]) {
+	if (self->client->pers.inventory[ITEM_INDEX(vehicle)]) 
+	{
 		//if we are too low, don't shoot, and move up.  Should be fairly simple, right?
 		if(self->enemy->s.origin[2] >= self->s.origin[2] - 128) { //we want to be well above our target
 			ucmd->upmove += 400;
@@ -1069,8 +1070,8 @@ standardmove:
 
 attack:
 	// Set the attack
-	if(ACEAI_CheckShot(self)) {
-
+	if(ACEAI_CheckShot(self)) 
+	{
 		//bot is taking a shot, lose spawn protection
 		// and calculate distance to enemy
 		range = 0.0f;
@@ -1083,7 +1084,7 @@ attack:
 			{ // point blank range, avoid potentially odd behaviour
 				use_fuzzy_aim = false;
 			}
-		}
+		}		
 
 		if(self->skill >= 2) 
 		{	//skill 2/3 bots can use alt-fires!
@@ -1149,7 +1150,7 @@ attack:
 				else
 					ucmd->buttons = BUTTON_ATTACK2;
 			}
-
+			
 			//vehicle alt-fires
 			if (self->client->pers.weapon == FindItem("bomber")
 				|| self->client->pers.weapon == FindItem("strafer")) 

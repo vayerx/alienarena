@@ -92,10 +92,16 @@ struct edict_s
 	edict_t		*owner;
 	
 	int			redirect_number;	//for ghost mode
+	
+	// must be accessible to server code for collision detection
+	int			dmteam;
+	int			teamset;
+#define RED_TEAM				0
+#define BLUE_TEAM				1
+#define NO_TEAM					2
 
 	// the game dll can add anything it wants after
 	// this point in the structure
-	edict_t     *orb;
 };
 
 #endif		// GAME_INCLUDE
@@ -128,6 +134,11 @@ typedef struct
 	int		(*modelindex) (char *name);
 	int		(*soundindex) (char *name);
 	int		(*imageindex) (char *name);
+	
+	// for checking if assets are already loaded - return 0 if they are not
+	int		(*checkmodelindex) (char *name);
+	int		(*checksoundindex) (char *name);
+	int		(*checkimageindex) (char *name);
 
 	void	(*setmodel) (edict_t *ent, char *name);
 
@@ -180,7 +191,7 @@ typedef struct
 	// for map changing, etc
 	void	(*AddCommandString) (char *text);
 
-	void	(*DebugGraph) (float value, int color);
+	void	(*DebugGraph) (float value, const float color[]);
 
 	int		(*Sys_Milliseconds) (void);
 

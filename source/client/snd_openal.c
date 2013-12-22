@@ -58,7 +58,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
  * Sound CVARS
  */
 #define MAX_SRC 128
-#define MIN_SRC_DEFAULT 96
+#define MAX_SRC_DEFAULT 96
+#define MIN_SRC_DEFAULT 64
 /*--- previous system ---*/
 // These 2 are defined in cl_main.c
 //cvar_t *background_music; //     enable/disable music
@@ -1812,7 +1813,7 @@ void S_Shutdown( void )
 
  ==
  */
-sfx_t *S_FindName( char *name, qboolean create )
+sfx_t *S_FindName( const char *name, qboolean create )
 {
 	sfxlink_t *sfxlink;
 	sfx_t *sfx = NULL;
@@ -1995,6 +1996,38 @@ void calModelFilename( entity_state_t *ent, const char *basename,
 	else
 	{ // return path to model specific sound
 		Com_sprintf( qfilepath, MAX_QPATH, "#players/%s/%s", model, basename );
+	}
+}
+
+/*
+ ==
+ S_RegisterSoundsForPlayer()
+
+ Register the model-specific sounds (pain, jumping, etc.) that should be
+ present for each player model.
+ 
+ This function is called from the model loading code. It relies on the fact
+ that the server precaches sounds before models, so the generic (fallback)
+ version of each model-specific sound is already in the precache list at this
+ point.
+ ==
+ */
+void S_RegisterSoundsForPlayer (char *playername)
+{
+	int		i;
+	char	soundpath[MAX_QPATH];
+	
+	return; // FIXME: figure out why Windows doesn't like this.
+	
+	for (i=1 ; i<MAX_SOUNDS ; i++)
+	{
+		if (!cl.configstrings[CS_SOUNDS+i][0])
+			break;
+		if (cl.configstrings[CS_SOUNDS+i][0] != '*')
+			continue;
+		cl.sound_precache[i] = S_RegisterSound (cl.configstrings[CS_SOUNDS+i]);
+		Com_sprintf (soundpath, MAX_QPATH, "#players/%s/%s", playername, &cl.configstrings[CS_SOUNDS+i][1]);
+		S_RegisterSound (soundpath);
 	}
 }
 
@@ -2271,7 +2304,7 @@ void S_StartMapMusic( void )
 
  ==
  */
-void S_StartLocalSound( char *qfilename )
+void S_StartLocalSound( const char *qfilename )
 {
 	sfx_t *sfx;
 	src_t *src;
@@ -2865,7 +2898,7 @@ void sndCvarInit( void )
 	s_volume = Cvar_Get( "s_volume", "0.1", CVAR_ARCHIVE );
 	// OpenAL CVARs
 	s_doppler = Cvar_Get( "s_doppler", "0.0", CVAR_ARCHIVE );
-	Com_sprintf(cvarset, sizeof(cvarset),"%i", MAX_SRC );
+	Com_sprintf(cvarset, sizeof(cvarset),"%i", MAX_SRC_DEFAULT );
 	s_maxsources = Cvar_Get( "s_maxsources", cvarset , CVAR_ARCHIVE );
 	Com_sprintf(cvarset, sizeof(cvarset),"%i", MIN_SRC_DEFAULT );
 	s_minsources = Cvar_Get( "s_minsources", cvarset, CVAR_ARCHIVE );

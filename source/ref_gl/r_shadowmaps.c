@@ -60,41 +60,30 @@ void			(APIENTRY * qglBlitFramebufferEXT) (GLint srcX0, GLint srcY0, GLint srcX1
 GLuint	fboId[3];
 GLuint	rboId;
 
-void getOpenGLFunctionPointers(void)
+void R_CheckFBOExtensions (void)
 {
-	// FBO
+	gl_state.fbo = true;
+	gl_state.hasFBOblit = false;
+
 	qglGenFramebuffersEXT		= (PFNGLGENFRAMEBUFFERSEXTPROC)		qwglGetProcAddress("glGenFramebuffersEXT");
 	qglBindFramebufferEXT		= (PFNGLBINDFRAMEBUFFEREXTPROC)		qwglGetProcAddress("glBindFramebufferEXT");
 	qglFramebufferTexture2DEXT	= (PFNGLFRAMEBUFFERTEXTURE2DEXTPROC)	qwglGetProcAddress("glFramebufferTexture2DEXT");
 	qglCheckFramebufferStatusEXT	= (PFNGLCHECKFRAMEBUFFERSTATUSEXTPROC)	qwglGetProcAddress("glCheckFramebufferStatusEXT");
 	qglGenRenderbuffersEXT		= (PFNGLGENRENDERBUFFERSEXTPROC)qwglGetProcAddress("glGenRenderbuffersEXT");
-    qglBindRenderbufferEXT		= (PFNGLBINDRENDERBUFFEREXTPROC)qwglGetProcAddress("glBindRenderbufferEXT");
-    qglRenderbufferStorageEXT	= (PFNGLRENDERBUFFERSTORAGEEXTPROC)qwglGetProcAddress("glRenderbufferStorageEXT");
+	qglBindRenderbufferEXT		= (PFNGLBINDRENDERBUFFEREXTPROC)qwglGetProcAddress("glBindRenderbufferEXT");
+	qglRenderbufferStorageEXT	= (PFNGLRENDERBUFFERSTORAGEEXTPROC)qwglGetProcAddress("glRenderbufferStorageEXT");
 	qglFramebufferRenderbufferEXT = (PFNGLFRAMEBUFFERRENDERBUFFEREXTPROC)qwglGetProcAddress("glFramebufferRenderbufferEXT");
 	qglBlitFramebufferEXT = (PFNGLBLITFRAMEBUFFEREXTPROC)qwglGetProcAddress("glBlitFramebufferEXT");
-}
-
-//used for post process stencil volume blurring and shadowmapping
-void R_GenerateShadowFBO()
-{
-	int shadowMapWidth = vid.width * r_shadowmapscale->value;
-    int shadowMapHeight = vid.height * r_shadowmapscale->value;
-	GLenum FBOstatus;
-
-	gl_state.fbo = true;
-
-	getOpenGLFunctionPointers();
 
 	if(!qglGenFramebuffersEXT || !qglBindFramebufferEXT || !qglFramebufferTexture2DEXT || !qglCheckFramebufferStatusEXT
 		|| !qglGenRenderbuffersEXT || !qglBindRenderbufferEXT || !qglRenderbufferStorageEXT || !qglFramebufferRenderbufferEXT)
 	{
-		Com_Printf("...GL_FRAMEBUFFER_COMPLETE_EXT failed, CANNOT use FBO\n");
+		Com_Printf("...Cannot find OpenGL Framebuffer extension, CANNOT use FBO\n");
 		gl_state.fbo = false;
 		return;
 	}
 
 	// Framebuffer object blit
-	gl_state.hasFBOblit = false;
 	if (strstr(gl_config.extensions_string, "GL_EXT_framebuffer_blit"))
 	{
 		Com_Printf("...using GL_EXT_framebuffer_blit\n");
@@ -102,8 +91,28 @@ void R_GenerateShadowFBO()
 	} else
 	{
 		Com_Printf("...GL_EXT_framebuffer_blit not found\n");
-		gl_state.hasFBOblit = false;
 	}
+	
+	//must check for ability to blit(Many old ATI drivers do not support)
+	//TODO: redundant with previous check?
+	if(gl_state.hasFBOblit) {
+		if(!qglBlitFramebufferEXT) {
+			Com_Printf("glBlitFramebufferEXT not found...\n");
+			gl_state.hasFBOblit = false;
+		}
+	}
+}
+    
+
+//used for post process stencil volume blurring and shadowmapping
+void R_GenerateShadowFBO()
+{
+	int shadowMapWidth = vid.width * r_shadowmapscale->value;
+	int shadowMapHeight = vid.height * r_shadowmapscale->value;
+	GLenum FBOstatus;
+	
+	if (!gl_state.fbo || !gl_state.hasFBOblit)
+	return;
 
 	//FBO for shadowmapping
 	qglBindTexture(GL_TEXTURE_2D, r_depthtexture->texnum);
@@ -185,16 +194,6 @@ void R_GenerateShadowFBO()
 
 	//FBO for capturing stencil volumes
 
-	//must check for abilit to blit(Many old ATI drivers do not support)
-	if(gl_state.hasFBOblit) {
-		if(!qglBlitFramebufferEXT) {
-			Com_Printf("qglBlitFramebufferEXT not found...\n");
-			//no point in continuing on
-			gl_state.hasFBOblit = false;
-			return;
-		}
-	}
-
     qglBindTexture(GL_TEXTURE_2D, r_colorbuffer->texnum);
     qglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vid.width, vid.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
     qglBindTexture(GL_TEXTURE_2D, 0);
@@ -222,6 +221,19 @@ void R_GenerateShadowFBO()
 	FBOstatus = qglCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
 	if(FBOstatus != GL_FRAMEBUFFER_COMPLETE_EXT)
 		Com_Printf("GL_FRAMEBUFFER_COMPLETE_EXT failed, CANNOT use secondary FBO\n");
+
+	// In the case we render the shadowmap to a higher resolution, the viewport must be modified accordingly.
+	qglViewport(0,0,vid.width,vid.height); 
+	
+	// Initialize frame values.
+	// This only makes a difference if the viewport is less than the screen
+	// size, like when the netgraph is on-- otherwise it's redundant with 
+	// later glClear calls.
+	qglClearColor (1, 1, 1, 1);
+	qglClear( GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT );
+	
+	// back to previous screen coordinates
+	R_SetupViewport ();
 
 	// switch back to window-system-provided framebuffer
 	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
@@ -289,7 +301,7 @@ void SM_SetupMatrices(float position_x,float position_y,float position_z,float l
 
 	qglMatrixMode(GL_PROJECTION);
 	qglLoadIdentity();
-	MYgluPerspective(120.0f, vid.width/vid.height, 10.0f, 4096.0f);
+	MYgluPerspective(120.0f, r_newrefdef.width/r_newrefdef.height, 10.0f, 4096.0f);
 	qglMatrixMode(GL_MODELVIEW);
 	qglLoadIdentity();
 	lookAt( position_x , position_y , position_z , lookAt_x , lookAt_y , lookAt_z );
@@ -619,8 +631,8 @@ void R_DrawShadowMapWorld (qboolean forEnt, vec3_t origin)
 		qglActiveTextureARB(GL_TEXTURE6);
 		qglBindTexture(GL_TEXTURE_2D, r_depthtexture2->texnum);
 
-		glUniform1fARB( g_location_xOffset, 1.0/(viddef.width*r_shadowmapscale->value));
-		glUniform1fARB( g_location_yOffset, 1.0/(viddef.height*r_shadowmapscale->value));
+		glUniform1fARB( g_location_xOffset, 1.0/(r_newrefdef.width*r_shadowmapscale->value));
+		glUniform1fARB( g_location_yOffset, 1.0/(r_newrefdef.height*r_shadowmapscale->value));
 
 		glUniform1fARB( g_location_fadeShadow, fadeShadow );
 		
@@ -1091,7 +1103,8 @@ void R_DrawEntityCaster(entity_t *ent)
     qglDisable( GL_POLYGON_OFFSET_FILL );
 	qglEnable(GL_CULL_FACE);
 
-	qglViewport( 0, 0, viddef.width, viddef.height );
+	// back to previous screen coordinates
+	R_SetupViewport ();
 
 	qglPopMatrix();
     qglMatrixMode(GL_PROJECTION);
@@ -1224,7 +1237,8 @@ void R_DrawRagdollCaster(int RagDollID)
     qglDisable( GL_POLYGON_OFFSET_FILL );
 	qglEnable(GL_CULL_FACE);
 
-	qglViewport( 0, 0, viddef.width, viddef.height );
+	// back to previous screen coordinates
+	R_SetupViewport ();
 
 	qglPopMatrix();
     qglMatrixMode(GL_PROJECTION);

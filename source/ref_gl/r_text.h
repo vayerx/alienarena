@@ -194,6 +194,28 @@ typedef void (* FNT_WrappedPrint_funct)(
 typedef void (* FNT_DestroyFont_funct)( FNT_font_t font );
 
 
+/*
+ * Size prediction function
+ *
+ * Determine how long the given text would be if drawn in the given font.
+ * Assumes no wrapping or boundaries-- it could well return a number greater
+ * than the horizontal resolution of the display.
+ *
+ * Parameters:
+ *	font		the font to use
+ *	text		the text to use
+ *  color       enable ^color code filtering
+ *
+ * Returns:
+ *  The width in pixels required to render the text in the font
+ */
+typedef int (* FNT_PredictSize_funct)(
+		FNT_font_t	font ,
+		const char *	text,
+		qboolean        color
+	);
+
+
 
 /**************************************************************************/
 /* STRUCTURES FOR FACES AND FONTS                                         */
@@ -235,11 +257,16 @@ struct FNT_font_s
 
 	/* The font's height in pixels */
 	unsigned int		size;
+	/* total line height in pixels, including spacing */
+	unsigned int		height;
+	/* theoretical maximum character width in pixels, given current size */
+	unsigned int		width; 
 
 	/* Printing functions */
 	FNT_RawPrint_funct	RawPrint;
 	FNT_BoundedPrint_funct	BoundedPrint;
 	FNT_WrappedPrint_funct	WrappedPrint;
+	FNT_PredictSize_funct	PredictSize;
 
 	/* Destructor */
 	FNT_DestroyFont_funct	Destroy;
@@ -414,6 +441,14 @@ void FNT_ReleaseFont( FNT_font_t font );
  */
 #define FNT_WrappedPrint(font,text,cmode,align,indent,box,color) \
 	( font->WrappedPrint( font , text , cmode , align , indent , box , color ) )
+
+
+/*
+ * Determine how much space is required to print the string. See comment on
+ * FNT_PredictSize_funct for more information.
+ */
+#define FNT_PredictSize(font,text,color) \
+	( font->PredictSize( font , text , color ) )
 
 
 

@@ -133,10 +133,27 @@ qboolean Pickup_Weapon (edict_t *ent, edict_t *other)
 		return false; //why pick them up in these modes?
 	}
 
-	if( g_tactical->integer && other->client->pers.inventory[index])
+	if( g_tactical->integer)
 	{
-		if ( ent->spawnflags & (DROPPED_ITEM | DROPPED_PLAYER_ITEM) )
-			return false; //don't pick up dropped weapon if you already have it
+		//certain classes can only use certain weapons
+		if(other->ctype == 0)
+		{
+			if(!strcmp(ent->classname, "weapon_rocketlauncher") || !strcmp(ent->classname, "weapon_chaingun") || !strcmp(ent->classname, "weapon_bfg")
+				|| !strcmp(ent->classname, "weapon_supershotgun"))
+				return false;
+		}
+		else if (!strcmp(ent->classname, "weapon_shotgun") || !strcmp(ent->classname, "weapon_hyperblaster") || !strcmp(ent->classname, "weapon_railgun")
+				|| !strcmp(ent->classname, "weapon_minderaser"))
+				return false;
+
+		//do not pick up a weapon if you already have one - the premise behind this is that it will give others opportunities to pick up weapons since they do not respawn
+		if(other->client->pers.inventory[ITEM_INDEX(FindItem("Alien Disruptor"))] || other->client->pers.inventory[ITEM_INDEX(FindItem("Alien Smartgun"))]
+			|| other->client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] || other->client->pers.inventory[ITEM_INDEX(FindItem("Disruptor"))]
+			|| other->client->pers.inventory[ITEM_INDEX(FindItem("Pulse Rifle"))] || other->client->pers.inventory[ITEM_INDEX(FindItem("Flame Thrower"))] )
+		{
+			safe_centerprintf(other, "Cannot pick up weapon, you already have a weapon");
+			return false;
+		}
 	}
 
 	if ( ( (dmflags->integer & DF_WEAPONS_STAY))
@@ -147,7 +164,6 @@ qboolean Pickup_Weapon (edict_t *ent, edict_t *other)
 	}
 
 	other->client->pers.inventory[index]++;
-
 
 	if (!(ent->spawnflags & DROPPED_ITEM) )
 	{
@@ -333,22 +349,27 @@ void ChangeWeapon (edict_t *ent)
 #endif
 
 	sprintf(weaponpath, "%s", weaponmodel);
-	Q2_FindFile (weaponpath, &file); //does it really exist?
-	if(!file)
+	ent->s.modelindex2 = gi.checkmodelindex(weaponmodel);
+	
+	if (ent->s.modelindex2 == 0) // check if hasn't already been loaded
 	{
-		sprintf(weaponpath, "%s%s", weaponame, "weapon.md2"); //no w_weaps, do we have this model?
-		Q2_FindFile (weaponpath, &file);
-		if(!file) //server does not have this player model
-			sprintf(weaponmodel, "players/martianenforcer/weapon.md2");//default player(martian)
-		else
-		{ //have the model, but it has no w_weaps
-			sprintf(weaponmodel, "players/%s%s", weaponame, "weapon.md2"); //custom weapon
-			fclose(file);
+		Q2_FindFile (weaponpath, &file); //does it really exist?
+		if(!file)
+		{
+			sprintf(weaponpath, "%s%s", weaponame, "weapon.md2"); //no w_weaps, do we have this model?
+			Q2_FindFile (weaponpath, &file);
+			if(!file) //server does not have this player model
+				sprintf(weaponmodel, "players/martianenforcer/weapon.md2");//default player(martian)
+			else
+			{ //have the model, but it has no w_weaps
+				sprintf(weaponmodel, "players/%s%s", weaponame, "weapon.md2"); //custom weapon
+				fclose(file);
+			}
 		}
+		else
+			fclose(file);
+		ent->s.modelindex2 = gi.modelindex(weaponmodel);
 	}
-	else
-		fclose(file);
-	ent->s.modelindex2 = gi.modelindex(weaponmodel);
 
 	//play a sound like in Q3, except for blaster, so it doesn't do it on spawn.
 	if( Q_strcasecmp( ent->client->pers.weapon->view_model,"models/weapons/v_blast/tris.md2") )
@@ -1530,7 +1551,7 @@ void Weapon_Beamgun_Fire (edict_t *ent)
 void Weapon_Beamgun (edict_t *ent)
 {
 	static int	pause_frames[]	= {53, 0};
-	static int	fire_frames[]	= {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 0};
+	static int	fire_frames[]	= {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 0};
 
 	Weapon_Generic (ent, 5, 24, 53, 57, pause_frames, fire_frames, Weapon_Beamgun_Fire);
 }
@@ -1898,7 +1919,6 @@ void Weapon_Deathball_Fire (edict_t *ent)
 	VectorSet(offset, 32, 5,  ent->viewheight-5);
 	P_ProjectSource (ent->client, ent->s.origin, offset, forward, right, start);
 
-
 	if(ent->client->ps.gunframe == 7) {
 
 		fire_deathball (ent, start, forward, 550);
@@ -1933,7 +1953,7 @@ void Weapon_Deathball (edict_t *ent)
 /*
 ======================================================================
 
-VIOALATOR
+VIOLATOR
 
 ======================================================================
 */
@@ -2102,5 +2122,54 @@ void Weapon_Violator (edict_t *ent)
 	else
 		Weapon_Generic (ent, 4, 14, 43, 46, pause_frames, fire_frames, Violator_Fire);
 
+}
+
+//Tactical weapons - bombs, detonators, etc
+
+void Weapon_TacticalBomb_Fire (edict_t *ent)
+{
+	vec3_t		start;
+	vec3_t		forward, right;
+	vec3_t		offset;
+
+	AngleVectors (ent->client->v_angle, forward, right, NULL);
+
+	VectorScale (forward, -3, ent->client->kick_origin);
+	ent->client->kick_angles[0] = -3;
+
+	VectorSet(offset, 32, 5,  ent->viewheight-5);
+	P_ProjectSource (ent->client, ent->s.origin, offset, forward, right, start);
+
+	if(ent->client->ps.gunframe == 7) {
+
+		fire_tacticalbomb (ent, start, forward, 100);
+
+		// send muzzle flash
+		gi.WriteByte (svc_muzzleflash);
+		gi.WriteShort (ent-g_edicts);
+		gi.WriteByte (MZ_RAILGUN | is_silenced);
+		gi.multicast (ent->s.origin, MULTICAST_PVS);
+
+		VectorAdd(start, forward, start);
+		start[2]+=6;
+		gi.WriteByte (svc_temp_entity);
+		gi.WriteByte (TE_BLUE_MUZZLEFLASH);
+		gi.WritePosition (start);
+		gi.multicast (start, MULTICAST_PVS);
+		
+		gi.sound(ent, CHAN_AUTO, gi.soundindex("weapons/energyfield.wav"), 1, ATTN_NORM, 0); // to do - change me
+		ent->client->weapon_sound = 0;
+	}
+	ent->client->ps.gunframe++;
+
+	ent->client->pers.inventory[ent->client->ammo_index]--;
+
+}
+void Weapon_TacticalBomb (edict_t *ent)
+{
+	static int	pause_frames[]	= {33, 0};
+	static int	fire_frames[]	= {7,0};
+
+	Weapon_Generic (ent, 5, 11, 33, 39, pause_frames, fire_frames, Weapon_TacticalBomb_Fire);
 }
 #endif

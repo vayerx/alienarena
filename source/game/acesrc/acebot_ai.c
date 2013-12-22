@@ -233,6 +233,27 @@ void ACEAI_PickLongRangeGoal(edict_t *self)
 		else
 			current_node = ACEND_FindClosestReachableNode(self,NODE_DENSITY,NODE_ALL);
 	}
+	else if(g_tactical->value) //when a base's laser barriers shut off, go into a more direct attack route
+	{
+		if (self->ctype == 1 && (!tacticalScore.alienComputer || !tacticalScore.alienPowerSource))
+		{
+			current_node = ACEND_FindClosestReachableNode(self,NODE_DENSITY,NODE_BLUEBASE);
+			if(current_node == -1)
+				current_node = ACEND_FindClosestReachableNode(self,NODE_DENSITY,NODE_ALL);
+			else
+				hasFlag = true; //we can use this from CTF - bots will ignore most anything and attack base components
+		}
+		else if (self->ctype == 0 && (!tacticalScore.humanComputer || !tacticalScore.humanPowerSource))
+		{
+			current_node = ACEND_FindClosestReachableNode(self,NODE_DENSITY,NODE_REDBASE);
+			if(current_node == -1)
+				current_node = ACEND_FindClosestReachableNode(self,NODE_DENSITY,NODE_ALL);
+			else
+				hasFlag = true;
+		}
+		else
+			current_node = ACEND_FindClosestReachableNode(self,NODE_DENSITY,NODE_ALL);
+	}
 	else
 		current_node = ACEND_FindClosestReachableNode(self,NODE_DENSITY,NODE_ALL);
 
@@ -312,7 +333,7 @@ void ACEAI_PickLongRangeGoal(edict_t *self)
 		//We can walk the node table and get the last linked node of this type further down the list than this node
 		for(i = 0;i < bot_numnodes; i++)
 		{
-			if (self->client->pers.inventory[ITEM_INDEX(flag1_item)])
+			if (self->client->pers.inventory[ITEM_INDEX(flag1_item)] || (g_tactical->value && self->ctype == 1))
 			{
 				if(nodes[i].type == NODE_BLUEBASE)
 				{
@@ -321,7 +342,7 @@ void ACEAI_PickLongRangeGoal(edict_t *self)
 				}
 			}
 
-			if (self->client->pers.inventory[ITEM_INDEX(flag2_item)])
+			if (self->client->pers.inventory[ITEM_INDEX(flag2_item)] || (g_tactical->value && self->ctype == 0))
 			{
 				if(nodes[i].type == NODE_REDBASE)
 				{
@@ -523,15 +544,16 @@ qboolean ACEAI_FindEnemy(edict_t *self)
 				self->enemy = NULL;
 				return false;
 			}
-			if(self->dmteam == RED_TEAM && (strcmp(target->classname, "item_blue_dbtarget") == 0))
+			if(self->dmteam == RED_TEAM && target->classname == "item_blue_dbtarget")
 				self->enemy = target;
-			else if(self->dmteam == BLUE_TEAM && (strcmp(target->classname, "item_red_dbtarget") == 0))
+			else if(self->dmteam == BLUE_TEAM && target->classname == "item_red_dbtarget")
 				self->enemy = target;
-			else if(self->dmteam == NO_TEAM && (strcmp(target->classname, "item_dbtarget") == 0))
+			else if(self->dmteam == NO_TEAM && target->classname == "item_dbtarget")
 				self->enemy = target;
 			target = findradius(target, self->s.origin, 200);
 		}
-		if(self->enemy) {
+		if(self->enemy) 
+		{
 			//safe_bprintf(PRINT_MEDIUM, "Target Aquired!\n");
 			self->movetarget = self->enemy;
 			self->goalentity= self->enemy; //face it, and fire
@@ -540,26 +562,31 @@ qboolean ACEAI_FindEnemy(edict_t *self)
 		else
 			return false;
 	}
+
 	//only look for these if your team's spider is vulnerable
 	if(tca->value && ((self->dmteam == RED_TEAM && red_team_score < 2) || (self->dmteam == BLUE_TEAM && blue_team_score < 2))) {
 		target = findradius(NULL, self->s.origin, 300);
 		self->enemy = NULL;
 		while(target)
 		{
-			if(target->classname == NULL) {
+			if(target->classname == NULL) 
+			{
 				self->enemy = NULL;
 				return false;
 			}
-			if(self->dmteam == RED_TEAM) {
-				if(strcmp(target->classname, "misc_bluespidernode") == 0)
+			if(self->dmteam == RED_TEAM) 
+			{
+				if(target->classname == "misc_bluespidernode")
 					self->enemy = target;
 			}
-			if(self->dmteam == BLUE_TEAM) {
-				if(strcmp(target->classname, "misc_redspidernode") == 0)
+			else if(self->dmteam == BLUE_TEAM) 
+			{
+				if(target->classname == "misc_redspidernode")
 					self->enemy = target;
 			}
 			target = findradius(target, self->s.origin, 300);
-			if(self->enemy) {
+			if(self->enemy) 
+			{
 				//safe_bprintf(PRINT_MEDIUM, "Target Aquired!\n");
 				self->movetarget = self->enemy;
 				self->goalentity= self->enemy; //face it, and fire
@@ -567,6 +594,53 @@ qboolean ACEAI_FindEnemy(edict_t *self)
 			}
 			else
 				return false;
+		}
+	}
+
+	if(g_tactical->value) 
+	{
+		target = findradius(NULL, self->s.origin, 200);
+		self->enemy = NULL;
+		while(target)
+		{
+			if(target->classname == NULL) 
+			{
+				self->enemy = NULL;
+				return false;
+			}
+			if(self->ctype == 1) 
+			{
+				if(target->classname == "hbomb")
+					return false; //prevents them from accidently destorying a planted bomb
+				else if(target->classname == "alien computer")
+					self->enemy = target;
+				else if(target->classname == "alien powersrc")
+					self->enemy = target;
+				else if(target->classname == "alien ammodepot")
+					self->enemy = target;
+				else if(target->classname == "alien backupgen")
+					self->enemy = target;
+			}
+			else if(self->ctype == 0)
+			{
+				if(target->classname == "abomb")
+					return false;
+				else if(target->classname == "human computer")
+					self->enemy = target;
+				else if(target->classname == "human powersrc")
+					self->enemy = target;
+				else if(target->classname == "human ammodepot")
+					self->enemy = target;
+				else if(target->classname == "human backupgen")
+					self->enemy = target;
+			}		
+			target = findradius(target, self->s.origin, 200);
+			if(self->enemy) 
+			{
+				self->movetarget = self->enemy;
+				self->goalentity= self->enemy; //face it, and fire
+				return true;
+			}
 		}
 	}
 
@@ -638,8 +712,9 @@ qboolean ACEAI_CheckShot(edict_t *self)
 
 	tr = gi.trace (self->s.origin, tv(-8,-8,-8), tv(8,8,8), self->enemy->s.origin, self, MASK_SOLID);
 
-	// Blocked, do not shoot
-	if ( tr.fraction < 1.0f )
+	// Blocked, do not shoot - JKD 4/25/2013 - changed the threshold from 1.0 to 0.6 - this seemed to work much better and solved problems where bots 
+	// would not fire at items even though they had an obviously clear shot.
+	if ( tr.fraction < 0.6f )
 		return false;
 
 	return true;
@@ -857,6 +932,31 @@ void ACEAI_ChooseWeapon(edict_t *self)
 		return;
 	}
 
+	//drop bombs if they have one, and the target is something that we want to plant a bomb near
+	if(g_tactical->integer) 
+	{
+		if(self->has_bomb && self->ctype == 0 
+			&& (self->enemy->classname == "human computer" || self->enemy->classname == "human powersrc" 
+			|| self->enemy->classname == "human ammodepot"))
+		{		
+			if(range < 300.0f)
+			{
+				if(ACEIT_ChangeWeapon( self, FindItem( "Alien Bomb" )))
+					return;
+			}
+		}
+		else if(self->has_bomb && self->ctype == 1 
+			&& (self->enemy->classname == "alien computer" || self->enemy->classname == "alien powersrc" 
+			|| self->enemy->classname == "alien ammodepot"))
+		{
+			if(range < 300.0f)
+			{
+				if(ACEIT_ChangeWeapon( self, FindItem( "Human Bomb" )))
+					return;
+			}
+		}
+	}
+
 	// what is the bot's favorite weapon?
 	// The bot will always check for it's favorite weapon first, 
 	// which is set in the bot's config file, 
@@ -946,6 +1046,7 @@ void ACEAI_ChooseWeapon(edict_t *self)
 
 	// now go through normal weapon favoring routine
 	//  always favor the Vaporizor, unless close, then use the violator
+#ifndef TACTICAL
 	if ( range < 200.0f && self->skill > 0 )
 	{
 		selected = ACEIT_ChangeWeapon( self, FindItem( "Violator" ));
@@ -953,6 +1054,7 @@ void ACEAI_ChooseWeapon(edict_t *self)
 		self->accuracy = 1.0f;
 		return;
 	}
+#endif
 	if ( self->skill > 1 )
 	{
 		if ( ACEIT_ChangeWeapon( self, FindItem( "Alien Vaporizer" )))

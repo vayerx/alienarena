@@ -23,7 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
   Mipmaps are generated for all texture types. If type <= it_wall, brightness
   and contrast settings are applied to it at load time. If type >= it_bump, 
   the standard mipmapping/anisotropic settings are always used, otherwise they
-  are only used if the entire texture has the same alpha value.
+  are only used if the entire texture has the same alpha value. If type !=
+  it_pic and type != it_particle, picmip settings are applied at load time.
 
 */
 
@@ -47,10 +48,10 @@ typedef struct image_s
 	int			width, height;			// source image
 	int			upload_width, upload_height;	// after power of two and picmip
 	int			registration_sequence;		// 0 = free
-	struct msurface_s	*texturechain;			// for sort-by-texture world drawing
 	int			texnum;				// gl texture binding
 	float			sl, tl, sh, th;			// 0,0 - 1,1 unless part of the scrap
-	int				crop_left, crop_top, crop_right, crop_bottom; //for cropped 2D drawing
+	int				crop_left, crop_top, crop_width, crop_height; //for cropped 2D drawing
+	float			crop_sl, crop_tl, crop_sh, crop_th;	// texcoords of cropped corners
 	qboolean		scrap;
 	qboolean		has_alpha;
 	qboolean		paletted;

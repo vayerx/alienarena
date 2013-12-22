@@ -561,15 +561,12 @@ model_t *Mod_ForName (char *name, qboolean crash)
 			if (mod->type == mod_alias || mod->type == mod_iqm)
 			{
 				// Make sure models scripts are definately reloaded between maps
-				char rs[MAX_OSPATH];
 				image_t *img;
 				img=mod->skins[0];
 
 				if (img != NULL)
 				{
-					strcpy(rs,mod->skins[0]->name);
-					rs[strlen(rs)-4]=0;
-					mod->script = RS_FindScript(rs);
+					mod->script = mod->skins[0]->script;
 					if (mod->script)
 						RS_ReadyScript( mod->script );
 				}
@@ -884,6 +881,7 @@ void Mod_LoadTexinfo (lump_t *l)
 
 		Com_sprintf (name, sizeof(name), "textures/%s", in->texture);
 		out->image->script = RS_FindScript(name);
+
 		if (out->image->script)
 			RS_ReadyScript(out->image->script);
 
@@ -1069,6 +1067,10 @@ void Mod_CalcSurfaceNormals(msurface_t *surf)
 		vec = p->verts[0];
 		_VectorCopy(surf->plane->normal, normal);
 
+		// FIXME: on some maps, this code doesn't always initialize v02, 
+		// leading to Valgrind complaining about use of uninitialized memory.
+		// dm-infinity and dm-zorn2k11 are two such maps. Probably not a huge
+		// deal, doesn't seem to be causing any issues.
 		for (v = p->verts[0], i = 0 ; i < p->numverts; i++, v += VERTEXSIZE)
 		{
 
@@ -1792,7 +1794,7 @@ void Mod_SummarizePVS (void)
 	byte		*vis;
 	mleaf_t		*leaf, *leaf2; 
 	int			cluster;
-	int			i, j;
+	int			i;
 	
 	loadmodel->num_areas = 0;
 	for (i = 0; i < MAX_MAP_AREAS; i++)
@@ -1804,8 +1806,6 @@ void Mod_SummarizePVS (void)
 	for (i=0,leaf=loadmodel->leafs ; i<loadmodel->numleafs ; i++, leaf++)
 	{
 		cluster = leaf->cluster;
-		leaf->maxPVSleaf = 0;
-		leaf->minPVSleaf = loadmodel->numleafs;
 		if (cluster == -1)
 			continue;
 		
@@ -1818,7 +1818,13 @@ void Mod_SummarizePVS (void)
 		if (leaf->area > loadmodel->num_areas)
 			loadmodel->num_areas = leaf->area;
 		
-		for (j=0,leaf2=loadmodel->leafs ; j<loadmodel->numleafs ; j++, leaf2++)
+		// Two separate loops, one for minPVSleaf and one for maxPVSleaf,
+		// each coming from opposite directions, for greater efficiency.
+		
+		for (	leaf->minPVSleaf = 0, leaf2 = loadmodel->leafs;
+				leaf->minPVSleaf < loadmodel->numleafs;
+				leaf->minPVSleaf++, leaf2++
+			)
 		{
 			cluster = leaf2->cluster;
 			if ((leaf2->contents & CONTENTS_SOLID) || cluster == -1)
@@ -1827,12 +1833,22 @@ void Mod_SummarizePVS (void)
 				continue;
 			
 			if (vis[cluster>>3] & (1<<(cluster&7)))
-			{
-				if (j < leaf->minPVSleaf)
-					leaf->minPVSleaf = j;
-				if (j > leaf->maxPVSleaf)
-					leaf->maxPVSleaf = j;
-			}
+				break;
+		}
+		
+		for (	leaf->maxPVSleaf = loadmodel->numleafs-1, leaf2 = &loadmodel->leafs[leaf->maxPVSleaf];
+				leaf->maxPVSleaf >= leaf->minPVSleaf;
+				leaf->maxPVSleaf--, leaf2--
+			)
+		{
+			cluster = leaf2->cluster;
+			if ((leaf2->contents & CONTENTS_SOLID) || cluster == -1)
+				continue;
+			if (leaf2->nummarksurfaces == 0)
+				continue;
+			
+			if (vis[cluster>>3] & (1<<(cluster&7)))
+				break;
 		}
 	}
 	loadmodel->num_areas++;
@@ -2028,6 +2044,9 @@ void R_RegisterBasePlayerModels( void )
 			Com_sprintf( mod_filename, sizeof(mod_filename), "players/%s/%s", BasePModels[i].name, BaseWModels[j]);
 			R_RegisterModel(mod_filename);
 		}
+		
+		//register standard sounds
+		S_RegisterSoundsForPlayer (BasePModels[i].name);
 
 		//register all skins
 		Com_sprintf( scratch, sizeof(scratch), "players/%s/*.jpg", BasePModels[i].name);
@@ -2088,6 +2107,9 @@ void R_RegisterCustomPlayerModels( void )
 			if(FS_FileExists(mod_filename))
 				R_RegisterModel(mod_filename);
 		}
+		
+		//register standard sounds
+		S_RegisterSoundsForPlayer (dirnames[i]);
 
 		//register all skins
 		strcpy( scratch, dirnames[i] );

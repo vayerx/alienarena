@@ -79,6 +79,7 @@ cvar_t	*cl_playtaunts;
 cvar_t	*cl_centerprint;
 cvar_t	*cl_precachecustom;
 cvar_t	*cl_simpleitems;
+cvar_t	*cl_flicker;
 
 cvar_t	*cl_paindist;
 cvar_t	*cl_explosiondist;
@@ -107,6 +108,8 @@ cvar_t	*m_pitch;
 cvar_t	*m_yaw;
 cvar_t	*m_forward;
 cvar_t	*m_side;
+
+cvar_t	*cl_test;
 
 //
 // userinfo
@@ -217,6 +220,8 @@ FNT_auto_t			CL_centerFont;
 static struct FNT_auto_s	_CL_centerFont;
 FNT_auto_t			CL_consoleFont;
 static struct FNT_auto_s	_CL_consoleFont;
+FNT_auto_t			CL_menuFont;
+static struct FNT_auto_s	_CL_menuFont;
 
 
 //======================================================================
@@ -1042,6 +1047,7 @@ int CL_GetPingStartTime(netadr_t adr)
 CL_PingServers_f
 =================
 */
+static void CL_ReadPackets ();
 void CL_PingServers_f (void)
 {
 
@@ -1054,7 +1060,7 @@ void CL_PingServers_f (void)
 
 	NET_Config (true);		// allow remote
 
-	GetServerList();        //get list from COR master server
+	GetServerList();		//get list from COR master server
 
 	// send a broadcast packet
 	Com_Printf ("pinging broadcast...\n");
@@ -1094,6 +1100,35 @@ void CL_PingServers_f (void)
 
 		Netchan_OutOfBandPrint (NS_CLIENT, adr, va("status %i", PROTOCOL_VERSION));
 
+	}
+	
+	// Note that all we have done thus far is 
+	// - Request server lists from the two master servers
+	// - Sent a broadcast to the LAN looking for local servers
+	// When CL_ReadPackets gets the responses from the master server, it will
+	// automatically ping all the game servers. Ideally, if the net connection
+	// is pretty good, we can get that all done in the following loop. The 
+	// game's main loop will catch any stragglers.
+	
+	// Read packets at 5 ms intervals 60 times. That's 300 ms. Figure maybe 
+	// 100-150 ms round trip to the master server, then another 100-150 ms 
+	// round trip to the game servers. So we should be able to grab any 
+	// servers 150 ping or less and gauge their pings to within 5 ms or so.
+#define PING_LOOP_TOTAL_MS		300
+#define PING_LOOP_INTERVAL_MS	5
+#define PING_LOOP_ITERATIONS	(PING_LOOP_TOTAL_MS/PING_LOOP_INTERVAL_MS)
+	for (i = 0; i < PING_LOOP_ITERATIONS; i++)
+	{
+		#if defined UNIX_VARIANT
+			usleep (PING_LOOP_INTERVAL_MS*1000);
+		#elif defined WIN32_VARIANT
+			Sleep (PING_LOOP_INTERVAL_MS);
+		#else
+			#warning	client/cl_main.c: CL_PingServers_f (): \
+						Do not know what sleep function to use!
+			break;
+		#endif
+		CL_ReadPackets ();
 	}
 
 	// -JD restart the menu music that was stopped during this procedure
@@ -1233,7 +1268,7 @@ static void CL_ConnectionlessPacket (void)
 		{
 			char *playerinfo_start;
 			if (cls.state >= ca_connected && 
-			    !memcmp(&net_from, &cls.netchan.remote_address, sizeof(netadr_t)))
+				!memcmp(&net_from, &cls.netchan.remote_address, sizeof(netadr_t)))
 				M_UpdateConnectedServerInfo (net_from, s);
 			if (cls.key_dest == key_menu)
 			{
@@ -1241,6 +1276,9 @@ static void CL_ConnectionlessPacket (void)
 			}
 			else
 			{
+				// If someone called pingservers () directly from the console,
+				// chances are he wants to read the server list manually 
+				// anyway.
 				playerinfo_start = strchr (s, '\n');
 				*playerinfo_start++ = '\0';
 				Info_Print (s);
@@ -1305,10 +1343,12 @@ void CL_DumpPackets (void)
 CL_ReadPackets
 =================
 */
+int c_incoming_bytes = 0;
 static void CL_ReadPackets (void)
 {
 	while (NET_GetPacket (NS_CLIENT, &net_from, &net_message))
 	{
+		c_incoming_bytes += net_message.cursize;
 
 		//
 		// remote command packet
@@ -1939,6 +1979,8 @@ void CL_InitLocal (void)
 	Cvar_Describe (cl_precachecustom, "precache 3rd-party and custom player skins at the first map load.");
 	cl_simpleitems = Cvar_Get ("cl_simpleitems", "0", CVAR_ARCHIVE | CVARDOC_BOOL);
 	Cvar_Describe (cl_simpleitems, "show sprites instead of models for pickup items.");
+	cl_flicker = Cvar_Get ("cl_flicker", "1", CVAR_ARCHIVE | CVARDOC_BOOL);
+	Cvar_Describe (cl_flicker, "enable flickering world lighting.");
 
 	cl_paindist = Cvar_Get ("cl_paindist", "1", CVAR_ARCHIVE);
 	cl_explosiondist = Cvar_Get ("cl_explosiondist", "1", CVAR_ARCHIVE);
@@ -1980,6 +2022,8 @@ void CL_InitLocal (void)
 
 	rcon_client_password = Cvar_Get ("rcon_password", "", CVARDOC_STR);
 	rcon_address = Cvar_Get ("rcon_address", "", CVARDOC_STR);
+	
+	cl_test = Cvar_Get ("cl_test", "0", CVAR_ARCHIVE);
 
 	//
 	// userinfo
@@ -2122,6 +2166,8 @@ void CL_InitLocal (void)
 	(void)R_RegisterPic("hud_strafer");
 	(void)R_RegisterPic("hud_hover");
 	(void)R_RegisterPic("blood_ring");
+
+	remoteserver_runspeed = 300; //default
 }
 
 
@@ -2482,7 +2528,7 @@ void CL_Frame( int msec )
 		}
 	}
 
-	if ( packet_trigger || send_packet_now )
+	if ( packet_trigger || send_packet_now || cls.download)
 	{
 		send_packet_now = false; // used during downloads
 
@@ -2531,7 +2577,10 @@ void CL_Frame( int msec )
 		/* run cURL downloads */
 		CL_HttpDownloadThink();
 
-		/* system dependent keyboard and mouse input event polling */
+		/* 
+		 * system dependent keyboard and mouse input event polling
+		 * accumulate keyboard and mouse events
+		 */
 		Sys_SendKeyEvents();
 
 		/* joystick input. may or may not be working. */
@@ -2540,7 +2589,11 @@ void CL_Frame( int msec )
 		/* execute pending commands */
 		Cbuf_Execute();
 
-		/* send client commands to server */
+		/*
+		 * send client commands to server
+		 * these are construced from accumulated keyboard and mouse events,
+		 * which are then reset
+		 */
 		CL_SendCmd();
 
 		/* clear various cvars unless single player */
@@ -2589,6 +2642,21 @@ void CL_Frame( int msec )
 	if ( render_trigger )
 	{
 		++render_counter; // counting renders since last packet
+		
+		if (!packet_trigger && cl_test->integer) //return cl_test - this was causing major issues with menu mouse in windows build
+		{
+			/* 
+			 * system dependent keyboard and mouse input event polling
+			 * accumulate keyboard and mouse events
+			 */
+			cls.frametime  = ((float)packet_timer) / 1000.0f;
+			Sys_SendKeyEvents();
+			/*
+			 * update view angles based on accumulated keyboard and mouse 
+			 * events, which are *not* reset
+			 */
+			IN_Move(NULL);
+		}
 
 		/*
 		 * calculate cls.frametime in seconds for render procedures.
@@ -2679,22 +2747,28 @@ void CL_Init (void)
 
 	// Initialise fonts
 	CL_gameFont = &_CL_gameFont;
-	FNT_AutoInit( CL_gameFont , "default" , 0 , 65 , 8 , 48 );
-	CL_gameFont->faceVar = Cvar_Get( "fnt_game" , "creativeblock" , CVAR_ARCHIVE );
+	FNT_AutoInit( CL_gameFont , "freesans" , 0 , 65 , 8 , 48 );
+	CL_gameFont->faceVar = Cvar_Get( "fnt_game" , "orbitron" , CVAR_ARCHIVE );
 	CL_gameFont->sizeVar = Cvar_Get( "fnt_game_size" , "0" , CVAR_ARCHIVE );
 	FNT_AutoRegister( CL_gameFont );
 
 	CL_centerFont = &_CL_centerFont;
-	FNT_AutoInit( CL_centerFont , "default" , 0 , 45 , 16 , 64 );
+	FNT_AutoInit( CL_centerFont , "freesans" , 0 , 45 , 16 , 64 );
 	CL_centerFont->faceVar = CL_gameFont->faceVar;
 	CL_centerFont->sizeVar = Cvar_Get( "fnt_center_size" , "0" , CVAR_ARCHIVE );
 	FNT_AutoRegister( CL_centerFont );
 
 	CL_consoleFont = &_CL_consoleFont;
-	FNT_AutoInit( CL_consoleFont , "default" , 0 , 52 , 8 , 48 );
+	FNT_AutoInit( CL_consoleFont , "freesans" , 0 , 52 , 8 , 48 );
 	CL_consoleFont->faceVar = Cvar_Get( "fnt_console" , "freemono" , CVAR_ARCHIVE );
 	CL_consoleFont->sizeVar = Cvar_Get( "fnt_console_size" , "0" , CVAR_ARCHIVE );
 	FNT_AutoRegister( CL_consoleFont );
+	
+	CL_menuFont = &_CL_menuFont;
+	FNT_AutoInit( CL_menuFont , "freesans" , 0 , 48 , 8 , 48 );
+	CL_menuFont->faceVar = Cvar_Get( "fnt_menu" , "freesans" , CVAR_ARCHIVE );
+	CL_menuFont->sizeVar = Cvar_Get( "fnt_menu_size" , "0" , CVAR_ARCHIVE );
+	FNT_AutoRegister( CL_menuFont );
 
 	// all archived variables will now be loaded
 

@@ -106,11 +106,25 @@ spawn_t	spawns[] = {
 	{"npc_cow", SP_npc_cow},
 	{"npc_deathray", SP_npc_deathray},
 
+	//TCA
 	{"misc_spiderpod", SP_misc_spiderpod},
 	{"misc_rednode", SP_misc_rednode},
 	{"misc_bluenode", SP_misc_bluenode},
 	{"misc_redspidernode", SP_misc_redspidernode},
 	{"misc_bluespidernode", SP_misc_bluespidernode},
+
+	//Tactical
+	{"misc_aliencomputer", SP_misc_aliencomputer},
+	{"misc_humancomputer", SP_misc_humancomputer},
+	{"misc_alienpowersrc", SP_misc_alienpowersrc},
+	{"misc_humanpowersrc", SP_misc_humanpowersrc},
+	{"misc_alienammodepot", SP_misc_alienammodepot},
+	{"misc_humanammodepot", SP_misc_humanammodepot},
+	{"misc_alienbackupgen", SP_misc_alienbackupgen},
+	{"misc_humanbackupgen", SP_misc_humanbackupgen},
+	{"misc_deathray", SP_misc_deathray}, //note - spawnflags determine team for this item(1 for human)
+	{"misc_laser", SP_misc_laser}, //spawnflag 1 for human
+
 	{"misc_mapmodel", SP_misc_mapmodel},
 	{"misc_watersplash", SP_misc_watersplash},
 	{"misc_electroflash", SP_misc_electroflash},
@@ -825,6 +839,75 @@ char *tca_statusbar =
 "pic 31 "
 "endif "
 ;
+
+char *tactical_statusbar =
+// background
+"yb -256 "
+"xl	 0 "
+"pic 0 "
+"xr  -130 "
+"yt  2 "
+"pic 8 "
+
+// health
+"yb	-29 "
+"xl	11 "
+"hnum "
+
+// ammo
+"if 2 "
+"	xl	76 "
+"	anum "
+"endif "
+
+// armor
+"	xl	142 "
+"	rnum "
+
+//  Human Computer
+"xr	-67 "
+"yt 16 "
+"num 3 25 "
+
+//  Human Power
+"yt 48 "
+"num 3 26 "
+
+//  Human Ammo Depot
+"yt 80 "
+"num 3 27 "
+
+//  Alien Computer
+"yt 122 "
+"num 3 28 "
+
+//  Alien Power
+"yt 154 "
+"num 3 29 "
+
+//  Alien Ammo Depot
+"yt 186 "
+"num 3 30 "
+
+// timer
+"if 9 "
+"	xv	324 "
+"   yb  -24 "
+"	num	2	10 "
+"	xv	358 "
+"   yb  -32 "
+"	pic	9 "
+"endif "
+
+// weapon icon
+"if 11 "
+"	xr	-72 "
+"   yt  196 "
+"	pic	11 "
+"endif "
+
+
+;
 /*QUAKED worldspawn (0 0 0) ?
 
 Only used for the world.
@@ -884,6 +967,8 @@ void SP_worldspawn (edict_t *ent)
 	}
 	else if (tca->integer)
 		gi.configstring (CS_STATUSBAR, tca_statusbar);
+	else if (g_tactical->integer)
+		gi.configstring (CS_STATUSBAR, tactical_statusbar);
 	else
 		gi.configstring (CS_STATUSBAR, dm_statusbar);
 
@@ -961,6 +1046,7 @@ void SP_worldspawn (edict_t *ent)
 	gi.soundindex ("misc/godlike.wav");
 	gi.soundindex ("misc/rampage.wav");
 	gi.soundindex ("misc/fight.wav");
+	gi.soundindex ("misc/minderaser.wav");
 
     //if maxclients is 0 or 1, it means someone is probably just testing a map
     //or testing some code, so we really don't need to precache all this crap

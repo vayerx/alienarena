@@ -230,6 +230,7 @@ void InitGame (void)
 	g_maxcells = gi.cvar("g_maxcells", "200", CVARDOC_INT);
 	g_maxslugs = gi.cvar("g_maxslugs", "50", CVARDOC_INT);
 	g_maxseekers = gi.cvar("g_maxseekers", "1", CVARDOC_INT);
+	g_maxbombs = gi.cvar("g_maxbombs", "1", CVARDOC_INT);
 
 	//quick weapon change
 	quickweap = gi.cvar ("quickweap", "0", CVAR_LATCH | CVAR_GAMEINFO | CVARDOC_INT);
@@ -277,7 +278,8 @@ void InitGame (void)
 	g_reward = gi.cvar("g_reward", "20", CVAR_SERVERINFO);
 
 	//antilag
-	g_antilag = gi.cvar("g_antilag", "1", CVAR_SERVERINFO);
+	g_antilag = gi.cvar("g_antilag", "1", CVAR_SERVERINFO | CVARDOC_BOOL);
+	g_antilagprojectiles = gi.cvar ("g_antilagprojectiles", "0", CVAR_GAMEINFO | CVARDOC_BOOL);
 	g_antilagdebug = gi.cvar("g_antilagdebug", "0", 0 /*CVAR_SERVERINFO*/);
 
 	// change anytime vars
@@ -338,13 +340,36 @@ void InitGame (void)
 	globals.num_edicts = game.maxclients+1;
 
 	//clear out team scores and player counts
-	if(tca->integer) {
+	if(tca->integer) 
+	{
 		blue_team_score = red_team_score = 4;
 		blue_team_matches = red_team_matches = 0;
 	}
-	else {
+	else 
+	{
 		red_team_score = 0;
 		blue_team_score = 0;
+	}
+
+	if(g_tactical->integer)
+	{
+		tacticalScore.alienAmmoDepot = 
+			tacticalScore.alienComputer = 
+			tacticalScore.alienPowerSource = 
+			tacticalScore.alienBackupGen = 
+			tacticalScore.humanAmmoDepot = 
+			tacticalScore.humanComputer = 
+			tacticalScore.humanPowerSource =
+			tacticalScore.humanBackupGen = 
+			true;
+
+		tacticalScore.alienAmmoDepotHealth = 
+			tacticalScore.alienComputerHealth = 
+			tacticalScore.alienPowerSourceHealth = 
+			tacticalScore.humanAmmoDepotHealth = 
+			tacticalScore.humanComputerHealth = 
+			tacticalScore.humanPowerSourceHealth =
+			100;
 	}
 
 	//reset minderaser

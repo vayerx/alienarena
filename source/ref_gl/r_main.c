@@ -48,7 +48,6 @@ glstate_t		gl_state;
 cvar_t	*gl_normalmaps;
 cvar_t	*gl_bspnormalmaps;
 cvar_t  *gl_shadowmaps;
-cvar_t	*gl_glsl_postprocess;
 cvar_t	*gl_arb_fragment_program;
 cvar_t	*gl_glsl_shaders;
 cvar_t	*gl_fog;
@@ -493,7 +492,6 @@ void R_DrawEntitiesOnList (void)
 	int		i;
 	rscript_t	*rs = NULL;
 	vec3_t	dist;
-	char    shortname[MAX_QPATH];
 
 	if (!r_drawentities->integer)
 		return;
@@ -517,8 +515,7 @@ void R_DrawEntitiesOnList (void)
 			//custom player skin (must be done here)
 			if (currententity->skin)
 			{
-                COM_StripExtension ( currententity->skin->name, shortname );
-                rs = RS_FindScript(shortname);
+			    rs = currententity->skin->script;
                 if(rs)
                     RS_ReadyScript(rs);
             }
@@ -587,8 +584,7 @@ void R_DrawEntitiesOnList (void)
 			//custom player skin (must be done here)
 			if (currententity->skin)
 			{
-                COM_StripExtension ( currententity->skin->name, shortname );
-                rs = RS_FindScript(shortname);
+                rs = currententity->skin->script;
                 if(rs)
                     RS_ReadyScript(rs);
             }
@@ -630,7 +626,6 @@ void R_DrawViewEntitiesOnList (void)
 {
 	int		i;
 	rscript_t	*rs = NULL;
-	char    shortname[MAX_QPATH];
 
 	if (!r_drawentities->integer)
 		return;
@@ -652,8 +647,7 @@ void R_DrawViewEntitiesOnList (void)
 			//custom player skin (must be done here)
 			if (currententity->skin)
 			{
-                COM_StripExtension ( currententity->skin->name, shortname );
-                rs = RS_FindScript(shortname);
+                rs = currententity->skin->script;
                 if(rs)
                     RS_ReadyScript(rs);
             }
@@ -701,8 +695,7 @@ void R_DrawViewEntitiesOnList (void)
 			//custom player skin (must be done here)
 			if (currententity->skin)
 			{
-                COM_StripExtension ( currententity->skin->name, shortname );
-                rs = RS_FindScript(shortname);
+                rs = currententity->skin->script;
                 if(rs)
                     RS_ReadyScript(rs);
             }
@@ -909,26 +902,37 @@ void MYgluPerspective( GLdouble fovy, GLdouble aspect,
 
 /*
 =============
+R_SetupViewport
+=============
+*/
+void R_SetupViewport (void)
+{
+	int		x, y, w, h;
+
+	// The viewport info in r_newrefdef is constructed with the upper left 
+	// corner as the origin, whereas glViewport treats the lower left corner
+	// as the origin. So we have to do some math to fix the y-coordinates.
+	
+	x = r_newrefdef.x;
+	w = r_newrefdef.width;
+	y = vid.height - r_newrefdef.y - r_newrefdef.height;
+	h = r_newrefdef.height;
+	
+	qglViewport (x, y, w, h);	// MPO : note this happens every frame interestingly enough
+}
+
+
+
+/*
+=============
 R_SetupGL
 =============
 */
 void R_SetupGL (void)
 {
 	float	screenaspect;
-	int		x, x2, y2, y, w, h;
-
-	//
-	// set up viewport
-	//
-	x = floor(r_newrefdef.x * vid.width / vid.width);
-	x2 = ceil((r_newrefdef.x + r_newrefdef.width) * vid.width / vid.width);
-	y = floor(vid.height - r_newrefdef.y * vid.height / vid.height);
-	y2 = ceil(vid.height - (r_newrefdef.y + r_newrefdef.height) * vid.height / vid.height);
-
-	w = x2 - x;
-	h = y - y2;
-
-	qglViewport (x, y2, w, h);	// MPO : note this happens every frame interestingly enough
+	
+	R_SetupViewport ();
 
 	//
 	// set up projection matrix
@@ -1050,7 +1054,7 @@ void R_RenderView (refdef_t *fd)
 
 	if (!r_worldmodel && !( r_newrefdef.rdflags & RDF_NOWORLDMODEL ) )
 		Com_Error (ERR_DROP, "R_RenderView: NULL worldmodel");
-
+	
 	// init r_speeds counters
 	last_c_brush_polys = c_brush_polys;
 	last_c_alias_polys = c_alias_polys;
@@ -1063,16 +1067,18 @@ void R_RenderView (refdef_t *fd)
 
 	R_PushDlights ();
 
-	if (gl_finish->integer)
-		qglFinish ();
-
 	R_SetupFrame ();
 
 	R_SetFrustum ();
+	
+	R_MarkWorldSurfs ();	// done here so we know if we're in water
+	
+	if (gl_finish->integer)
+		qglFinish ();
+	
+	// OpenGL calls come after here
 
 	R_SetupGL ();
-
-	R_MarkLeaves ();	// done here so we know if we're in water
 
 	if(map_fog)
 	{
@@ -1084,9 +1090,7 @@ void R_RenderView (refdef_t *fd)
 		qglEnable(GL_FOG);
 	}
 
-	R_DrawWorld ();
-
-	R_DrawRSSurfaces();
+	R_DrawWorldSurfs ();
 
 	if(r_lensflare->integer)
 		R_RenderFlares ();
@@ -1116,7 +1120,8 @@ void R_RenderView (refdef_t *fd)
 		if (	ms < r_newrefdef.last_mirrorupdate_time || 
 				(ms-r_newrefdef.last_mirrorupdate_time) >= 16)
 		{
-			qglBindTexture(GL_TEXTURE_2D, r_mirrortexture->texnum);
+			GL_SelectTexture (GL_TEXTURE0);
+			GL_Bind (r_mirrortexture->texnum);
 			qglCopyTexSubImage2D(GL_TEXTURE_2D, 0,
 						0, 0, 0, r_mirrortexture->upload_height/2, 
 						r_mirrortexture->upload_width, 
@@ -1270,7 +1275,6 @@ void R_Register( void )
 	gl_normalmaps = Cvar_Get("gl_normalmaps", "1", CVAR_ARCHIVE|CVARDOC_BOOL);
 	gl_bspnormalmaps = Cvar_Get("gl_bspnormalmaps", "0", CVAR_ARCHIVE|CVARDOC_BOOL);
 	gl_shadowmaps = Cvar_Get("gl_shadowmaps", "0", CVAR_ARCHIVE|CVARDOC_BOOL);
-	gl_glsl_postprocess = Cvar_Get("gl_glsl_postprocess", "1", CVAR_ARCHIVE|CVARDOC_BOOL);
 	gl_fog = Cvar_Get ("gl_fog", "1", CVAR_ARCHIVE|CVARDOC_BOOL);
 	Cvar_Describe (gl_fog, "Fog and weather effects.");
 
@@ -1307,6 +1311,16 @@ void R_Register( void )
 	Cvar_Describe (r_firstrun, "Set this to 0 if you want the game to auto detect your graphics settings next time you run it.");
 
 	r_test = Cvar_Get("r_test", "0", CVAR_ARCHIVE); //for testing things
+	
+	// FIXME HACK copied over from the video menu code. These are initialized
+	// again elsewhere. TODO: work out any complications that may arise from
+	// deleting these duplicate initializations.
+	Cvar_Get( "r_bloom", "0", CVAR_ARCHIVE );
+	Cvar_Get( "r_bloom_intensity", "0.5", CVAR_ARCHIVE);
+	Cvar_Get( "r_overbrightbits", "2", CVAR_ARCHIVE);
+	Cvar_Get( "vid_width", "640", CVAR_ARCHIVE);
+	Cvar_Get( "vid_height", "400", CVAR_ARCHIVE);
+	Cvar_Get( "gl_glsl_shaders", "1", CVAR_ARCHIVE);
 
 	Cmd_AddCommand( "imagelist", GL_ImageList_f );
 	Cmd_AddCommand( "screenshot", GL_ScreenShot_f );
@@ -1510,8 +1524,6 @@ int R_Init( void *hinstance, void *hWnd )
 		return -1;
 	}
 
-	VID_MenuInit();
-
 	/*
 	** get our various GL strings
 	*/
@@ -1685,6 +1697,8 @@ cpuinfo_exit:
 #endif
 
 	GL_SetDefaultState();
+	
+	R_CheckFBOExtensions ();
 
 	GL_InitImages ();
 	Mod_Init ();

@@ -318,7 +318,8 @@ will keep the demoloop from immediately starting
 */
 qboolean Cbuf_AddLateCommands (void)
 {
-	int		i, j;
+	int		i;
+	char	*t, *u;
 	int		s;
 	char	*text, *build, c;
 	int		argc;
@@ -347,22 +348,28 @@ qboolean Cbuf_AddLateCommands (void)
 	build = Z_Malloc (s+1);
 	build[0] = 0;
 
-	for (i=0 ; i<s-1 ; i++)
+	// Logic changed May 11 2013: hyphens still terminate commands, but must
+	// be preceeded by a space or tab character. Reason: allows hyphens in
+	// map names when specified as command line arguments to the game binary,
+	// as in: alienarena +map dm-deathray
+	// -Max
+	for (t = text ; t < &text[s-1] ; t++)
 	{
-		if (text[i] == '+')
+		if (*t == '+')
 		{
-			i++;
+			t++;
 
-			for (j=i ; (text[j] != '+') && (text[j] != '-') && (text[j] != 0) ; j++)
-				;
+			u = t;
+			while (*u != '+' && *u != '\0' && !((*(u-1) == ' ' || *(u-1) == '\t') && *u == '-'))
+				u++;
 
-			c = text[j];
-			text[j] = 0;
+			c = *u;
+			*u = 0;
 
-			strcat (build, text+i);
+			strcat (build, t);
 			strcat (build, "\n");
-			text[j] = c;
-			i = j-1;
+			*u = c;
+			t = u-1;
 		}
 	}
 
@@ -820,23 +827,24 @@ void	Cmd_AddCommand (char *cmd_name, xcommand_t function)
 	cmd_function_t	*cmd, **prev, *ncmd;
 	unsigned int	hash_key, i;
 
-// fail if the command is a variable name
+	// fail if the command is a variable name
 	if (Cvar_VariableString(cmd_name)[0])
 	{
 		Com_Printf ("Cmd_AddCommand: %s already defined as a var\n", cmd_name);
 		return;
 	}
 
-// compute the hash key for this command
+	// compute the hash key for this command
 	COMPUTE_HASH_KEY( hash_key, cmd_name , i );
 
-// fail if the command already exists
+	// fail if the command already exists (harmless if it's already the same.)
 	prev = &cmd_functions;
 	for (cmd=cmd_functions ; cmd && cmd->hash_key <= hash_key ; cmd=cmd->next)
 	{
 		if (cmd->hash_key == hash_key && !Q_strcasecmp (cmd_name, cmd->name))
 		{
-			Com_Printf ("Cmd_AddCommand: %s already defined\n", cmd_name);
+			if (cmd->function != function)
+				Com_Printf ("Cmd_AddCommand: %s already defined\n", cmd_name);
 			return;
 		}
 		prev = &( cmd->next );

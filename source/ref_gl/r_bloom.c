@@ -67,15 +67,17 @@ cvar_t		*r_bloom_darken;
 cvar_t		*r_bloom_sample_size;
 cvar_t		*r_bloom_fast_sample;
 
-image_t	*r_bloomscreentexture;
+image_t	*r_bloomscratchtexture;
 image_t	*r_bloomeffecttexture;
-image_t	*r_bloombackuptexture;
-image_t	*r_bloomdownsamplingtexture;
+image_t	*r_midsizetexture;
+static GLuint bloomscratchFBO, midsizeFBO, bloomeffectFBO;
+static GLuint bloom_fullsize_downsampling_rbo_FBO;
+static GLuint bloom_fullsize_downsampling_RBO;
 
-static int		r_screendownsamplingtexture_size;
+static int		r_midsizetexture_size;
 static int		screen_texture_width, screen_texture_height;
-static int		r_screenbackuptexture_width, r_screenbackuptexture_height;
 
+GLint MultiSampleEnabled = 0; //1 if MSAA is enabled
 
 //current refdef size:
 static int	curView_x;
@@ -83,63 +85,88 @@ static int	curView_y;
 static int	curView_width;
 static int	curView_height;
 
-//texture coordinates of screen data inside screentexture
-static float screenText_tcw;
-static float screenText_tch;
-
-static int	sample_width;
-static int	sample_height;
-
-//texture coordinates of adjusted textures
-static float sampleText_tcw;
-static float sampleText_tch;
-
-//this macro is in sample size workspace coordinates
-#define R_Bloom_SamplePass( xpos, ypos )							\
-	qglBegin(GL_QUADS);												\
-	qglTexCoord2f(	0,						sampleText_tch);		\
-	qglVertex2f(	xpos,					ypos);					\
-	qglTexCoord2f(	0,						0);						\
-	qglVertex2f(	xpos,					ypos+sample_height);	\
-	qglTexCoord2f(	sampleText_tcw,			0);						\
-	qglVertex2f(	xpos+sample_width,		ypos+sample_height);	\
-	qglTexCoord2f(	sampleText_tcw,			sampleText_tch);		\
-	qglVertex2f(	xpos+sample_width,		ypos);					\
+#define R_Bloom_Quad( x, y, width, height )	\
+	qglBegin(GL_QUADS);						\
+	qglTexCoord2f(	0,			1.0);		\
+	qglVertex2f(	x,			y);			\
+	qglTexCoord2f(	0,			0);			\
+	qglVertex2f(	x,			y+height);	\
+	qglTexCoord2f(	1.0,		0);			\
+	qglVertex2f(	x+width,	y+height);	\
+	qglTexCoord2f(	1.0,		1.0);		\
+	qglVertex2f(	x+width,	y);			\
 	qglEnd();
 
-#define R_Bloom_Quad( x, y, width, height, textwidth, textheight )	\
-	qglBegin(GL_QUADS);												\
-	qglTexCoord2f(	0,			textheight);						\
-	qglVertex2f(	x,			y);									\
-	qglTexCoord2f(	0,			0);									\
-	qglVertex2f(	x,			y+height);							\
-	qglTexCoord2f(	textwidth,	0);									\
-	qglVertex2f(	x+width,	y+height);							\
-	qglTexCoord2f(	textwidth,	textheight);						\
-	qglVertex2f(	x+width,	y);									\
-	qglEnd();
+#define R_Bloom_SamplePass( xpos, ypos ) R_Bloom_Quad ( xpos, ypos, BLOOM_SIZE, BLOOM_SIZE)
 
 
 
 /*
 =================
-R_Bloom_InitBackUpTexture
+R_Bloom_AllocFBOTexture 
+
+Create a 24-bit square texture with specified size and attach it to an FBO
 =================
 */
-void R_Bloom_InitBackUpTexture( int width, int height )
+image_t *R_Bloom_AllocFBOTexture (char *name, int size_side, GLuint *FBO)
 {
 	byte	*data;
+	int		size;
+	image_t	*image;
+	
+	size = size_side*size_side*3;
+	data = malloc (size);
+	memset (data, 0, size);
+	
+	// create the texture
+	image = GL_FindFreeImage (name, size_side, size_side, it_pic);
+	GL_Bind (image->texnum);
+	qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	qglTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, size_side, size_side, 0, GL_RGB, GL_UNSIGNED_BYTE, (byte*)data);
+	
+	// create up the FBO
+	qglGenFramebuffersEXT(1, FBO);
+	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT,*FBO);
 
-	data = malloc( width * height * 4 );
-	memset( data, 0, width * height * 4 );
-
-	r_screenbackuptexture_width = width;
-	r_screenbackuptexture_height = height;
-
-	r_bloombackuptexture = GL_LoadPic( "***r_bloombackuptexture***", (byte *)data, width, height, it_pic, 3 );
-
-	free ( data );
+	// bind the texture to it
+	qglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, image->texnum, 0);
+	
+	// clean up 
+	free (data);
+	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT,0);
+	
+	return image;
 }
+
+
+
+/*
+=================
+R_Bloom_AllocRBO
+
+Create a 24-bit square RBO with specified size and attach it to an FBO
+=================
+*/
+void R_Bloom_AllocRBO (int width, int height, GLuint *RBO, GLuint *FBO)
+{
+	// create the RBO
+	qglGenRenderbuffersEXT(1, RBO);
+    qglBindRenderbufferEXT(GL_RENDERBUFFER_EXT, *RBO);
+    qglRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_RGB, width, height);
+    qglBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
+    
+    // create up the FBO
+	qglGenFramebuffersEXT(1, FBO);
+	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, *FBO);
+	
+	// bind the RBO to it
+	qglFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_RENDERBUFFER_EXT, *RBO);
+	
+	//clean up
+	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+}
+
+
 
 /*
 =================
@@ -148,7 +175,6 @@ R_Bloom_InitEffectTexture
 */
 void R_Bloom_InitEffectTexture( void )
 {
-	byte	*data;
 	float	bloomsizecheck;
 
 	if( r_bloom_sample_size->integer < 32 )
@@ -173,12 +199,7 @@ void R_Bloom_InitEffectTexture( void )
 	if( BLOOM_SIZE != r_bloom_sample_size->integer )
 		Cvar_SetValue ("r_bloom_sample_size", BLOOM_SIZE);
 
-	data = malloc( BLOOM_SIZE * BLOOM_SIZE * 4 );
-	memset( data, 0, BLOOM_SIZE * BLOOM_SIZE * 4 );
-
-	r_bloomeffecttexture = GL_LoadPic( "***r_bloomeffecttexture***", (byte *)data, BLOOM_SIZE, BLOOM_SIZE, it_pic, 3 );
-
-	free ( data );
+	r_bloomeffecttexture = R_Bloom_AllocFBOTexture ("***r_bloomeffecttexture***", BLOOM_SIZE, &bloomeffectFBO);
 }
 
 /*
@@ -186,51 +207,42 @@ void R_Bloom_InitEffectTexture( void )
 R_Bloom_InitTextures
 =================
 */
+void checkFBOExtensions (void);
 void R_Bloom_InitTextures( void )
 {
-	byte	*data;
-	int		size;
-
+	if (!gl_state.fbo || !gl_state.hasFBOblit)
+	{
+		Com_Printf ("FBO Failed, disabling bloom.\n");
+		Cvar_SetValue ("r_bloom", 0);
+		return;
+	}
+	
+	qglGetError ();
+	
+	qglGetIntegerv(GL_SAMPLE_BUFFERS, &MultiSampleEnabled);
+	
 	//find closer power of 2 to screen size
 	for (screen_texture_width = 1;screen_texture_width < viddef.width;screen_texture_width *= 2);
 	for (screen_texture_height = 1;screen_texture_height < viddef.height;screen_texture_height *= 2);
 
-	//disable blooms if we can't handle a texture of that size
-/*	if( screen_texture_width > gl_config.maxTextureSize ||
-		screen_texture_height > glConfig.maxTextureSize ) {
-		screen_texture_width = screen_texture_height = 0;
-		Cvar_SetValue ("r_bloom", 0);
-		Com_Printf( "WARNING: 'R_InitBloomScreenTexture' too high resolution for Light Bloom. Effect disabled\n" );
-		return;
-	}*/
-
-	//init the screen texture
-	size = screen_texture_width * screen_texture_height * 4;
-	data = malloc( size );
-	memset( data, 255, size );
-	r_bloomscreentexture = GL_LoadPic( "***r_bloomscreentexture***", (byte *)data, screen_texture_width, screen_texture_height, it_pic, 3 );
-	free ( data );
-
 	//validate bloom size and init the bloom effect texture
 	R_Bloom_InitEffectTexture();
 
+	//init the "scratch" texture
+	r_bloomscratchtexture = R_Bloom_AllocFBOTexture ("***r_bloomscratchtexture***", BLOOM_SIZE, &bloomscratchFBO);
+	
+	//init the screen-size RBO
+	R_Bloom_AllocRBO (viddef.width, viddef.height, &bloom_fullsize_downsampling_RBO, &bloom_fullsize_downsampling_rbo_FBO);
+
 	//if screensize is more than 2x the bloom effect texture, set up for stepped downsampling
-	r_bloomdownsamplingtexture = NULL;
-	r_screendownsamplingtexture_size = 0;
+	r_midsizetexture = NULL;
+	r_midsizetexture_size = 0;
 	if( viddef.width > (BLOOM_SIZE * 2) && !r_bloom_fast_sample->integer )
 	{
-		r_screendownsamplingtexture_size = (int)(BLOOM_SIZE * 2);
-		data = malloc( r_screendownsamplingtexture_size * r_screendownsamplingtexture_size * 4 );
-		memset( data, 0, r_screendownsamplingtexture_size * r_screendownsamplingtexture_size * 4 );
-		r_bloomdownsamplingtexture = GL_LoadPic( "***r_bloomdownsamplingtexture***", (byte *)data, r_screendownsamplingtexture_size, r_screendownsamplingtexture_size, it_pic, 3 );
-		free ( data );
+		r_midsizetexture_size = (int)(BLOOM_SIZE * 2);
+		// mid-size texture
+		r_midsizetexture = R_Bloom_AllocFBOTexture ("***r_midsizetexture***", r_midsizetexture_size, &midsizeFBO);
 	}
-
-	//Init the screen backup texture
-	if( r_screendownsamplingtexture_size )
-		R_Bloom_InitBackUpTexture( r_screendownsamplingtexture_size, r_screendownsamplingtexture_size );
-	else
-		R_Bloom_InitBackUpTexture( BLOOM_SIZE, BLOOM_SIZE );
 
 }
 
@@ -271,110 +283,18 @@ void R_Bloom_DrawEffect( void )
 	qglColor4f(r_bloom_alpha->value, r_bloom_alpha->value, r_bloom_alpha->value, 1.0f);
 	GL_TexEnv(GL_MODULATE);
 	qglBegin(GL_QUADS);
-	qglTexCoord2f(	0,							sampleText_tch	);
+	qglTexCoord2f(	0,							1.0	);
 	qglVertex2f(	curView_x,					curView_y	);
 	qglTexCoord2f(	0,							0	);
 	qglVertex2f(	curView_x,					curView_y + curView_height	);
-	qglTexCoord2f(	sampleText_tcw,				0	);
+	qglTexCoord2f(	1.0,						0	);
 	qglVertex2f(	curView_x + curView_width,	curView_y + curView_height	);
-	qglTexCoord2f(	sampleText_tcw,				sampleText_tch	);
+	qglTexCoord2f(	1.0,						1.0	);
 	qglVertex2f(	curView_x + curView_width,	curView_y	);
 	qglEnd();
 
 	qglDisable(GL_BLEND);
 }
-
-
-#if 0
-/*
-=================
-R_Bloom_GeneratexCross - alternative bluring method
-=================
-*/
-void R_Bloom_GeneratexCross( void )
-{
-	int			i;
-	static int		BLOOM_BLUR_RADIUS = 8;
-	//static float	BLOOM_BLUR_INTENSITY = 2.5f;
-	float	BLOOM_BLUR_INTENSITY;
-	static float intensity;
-	static float range;
-
-	//set up sample size workspace
-	qglViewport( 0, 0, sample_width, sample_height );
-	qglMatrixMode( GL_PROJECTION );
-    qglLoadIdentity ();
-	qglOrtho(0, sample_width, sample_height, 0, -10, 100);
-	qglMatrixMode( GL_MODELVIEW );
-    qglLoadIdentity ();
-
-	//copy small scene into r_bloomeffecttexture
-	GL_Bind(0, r_bloomeffecttexture);
-	qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
-
-	//start modifying the small scene corner
-	qglColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
-	qglEnable(GL_BLEND);
-
-	//darkening passes
-	if( r_bloom_darken->integer )
-	{
-		qglBlendFunc(GL_DST_COLOR, GL_ZERO);
-		GL_TexEnv(GL_MODULATE);
-
-		for(i=0; i<r_bloom_darken->integer ;i++) {
-			R_Bloom_SamplePass( 0, 0 );
-		}
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
-	}
-
-	//bluring passes
-	if( BLOOM_BLUR_RADIUS ) {
-
-		qglBlendFunc(GL_ONE, GL_ONE);
-
-		range = (float)BLOOM_BLUR_RADIUS;
-
-		BLOOM_BLUR_INTENSITY = r_bloom_intensity->value;
-		//diagonal-cross draw 4 passes to add initial smooth
-		qglColor4f( 0.5f, 0.5f, 0.5f, 1.0);
-		R_Bloom_SamplePass( 1, 1 );
-		R_Bloom_SamplePass( -1, 1 );
-		R_Bloom_SamplePass( -1, -1 );
-		R_Bloom_SamplePass( 1, -1 );
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
-
-		for(i=-(BLOOM_BLUR_RADIUS+1);i<BLOOM_BLUR_RADIUS;i++) {
-			intensity = BLOOM_BLUR_INTENSITY/(range*2+1)*(1 - fabs(i*i)/(float)(range*range));
-			if( intensity < 0.05f ) continue;
-			qglColor4f( intensity, intensity, intensity, 1.0f);
-			R_Bloom_SamplePass( i, 0 );
-			//R_Bloom_SamplePass( -i, 0 );
-		}
-
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
-
-		//for(i=0;i<BLOOM_BLUR_RADIUS;i++) {
-		for(i=-(BLOOM_BLUR_RADIUS+1);i<BLOOM_BLUR_RADIUS;i++) {
-			intensity = BLOOM_BLUR_INTENSITY/(range*2+1)*(1 - fabs(i*i)/(float)(range*range));
-			if( intensity < 0.05f ) continue;
-			qglColor4f( intensity, intensity, intensity, 1.0f);
-			R_Bloom_SamplePass( 0, i );
-			//R_Bloom_SamplePass( 0, -i );
-		}
-
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
-	}
-
-	//restore full screen workspace
-	qglViewport( 0, 0, glState.width, glState.height );
-	qglMatrixMode( GL_PROJECTION );
-    qglLoadIdentity ();
-	qglOrtho(0, glState.width, glState.height, 0, -10, 100);
-	qglMatrixMode( GL_MODELVIEW );
-    qglLoadIdentity ();
-}
-#endif
 
 
 /*
@@ -388,16 +308,14 @@ void R_Bloom_GeneratexDiamonds( void )
 	static float intensity;
 
 	//set up sample size workspace
-	qglViewport( 0, 0, sample_width, sample_height );
+	qglViewport( 0, 0, BLOOM_SIZE, BLOOM_SIZE );
 	qglMatrixMode( GL_PROJECTION );
-    qglLoadIdentity ();
-	qglOrtho(0, sample_width, sample_height, 0, -10, 100);
+	qglLoadIdentity ();
+	qglOrtho(0, BLOOM_SIZE, BLOOM_SIZE, 0, -10, 100);
 	qglMatrixMode( GL_MODELVIEW );
-    qglLoadIdentity ();
-
-	//copy small scene into r_bloomeffecttexture
+	
+	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, bloomscratchFBO);
 	GL_Bind(r_bloomeffecttexture->texnum);
-	qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
 
 	//start modifying the small scene corner
 	qglColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
@@ -408,17 +326,18 @@ void R_Bloom_GeneratexDiamonds( void )
 	{
 		qglBlendFunc(GL_DST_COLOR, GL_ZERO);
 		GL_TexEnv(GL_MODULATE);
-
+		
 		for(i=0; i<r_bloom_darken->integer ;i++) {
 			R_Bloom_SamplePass( 0, 0 );
 		}
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
+		
+		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, BLOOM_SIZE, BLOOM_SIZE);
 	}
 
 	//bluring passes
 	//qglBlendFunc(GL_ONE, GL_ONE);
 	qglBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_COLOR);
-
+	
 	if( r_bloom_diamond_size->integer > 7 || r_bloom_diamond_size->integer <= 3)
 	{
 		if( r_bloom_diamond_size->integer != 8 ) Cvar_SetValue( "r_bloom_diamond_size", 8 );
@@ -456,62 +375,141 @@ void R_Bloom_GeneratexDiamonds( void )
 			}
 		}
 	}
-
-	qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sample_width, sample_height);
-
+	
+	qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, BLOOM_SIZE, BLOOM_SIZE);
+	
 	//restore full screen workspace
 	qglViewport( 0, 0, viddef.width, viddef.height );
 	qglMatrixMode( GL_PROJECTION );
-    qglLoadIdentity ();
+	qglLoadIdentity ();
 	qglOrtho(0, viddef.width, viddef.height, 0, -10, 100);
 	qglMatrixMode( GL_MODELVIEW );
-    qglLoadIdentity ();
+	qglLoadIdentity ();
+
+	qglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+}
+
+/*
+=================
+R_Bloom_FullsizeRBOUpdate
+
+This updates the full size RBO from the screen. The whole thing is guaranteed
+to be updated 60 times a second, but it does it a 1/4 of the screen at a time
+if the framerate is high enough. It does it in horizontal slices instead of
+quadrants because that way the GPU doesn't have to skip over part of each row
+of pixels. Tearing isn't an issue because it'll just be blurred to mush
+anyway.
+=================
+*/
+void R_Bloom_FullsizeRBOUpdate (void)
+{
+	static int	cur_section = 0;
+	static int	last_time = 0;
+	int			i, num_sections, cur_time;
+	int			y;
+	
+	cur_time = Sys_Milliseconds();
+	num_sections = (cur_time-last_time+2)/4;
+	if (num_sections > 4) num_sections = 4;
+	if (num_sections == 0) return;
+	
+	for (i = 0; i < num_sections; i++)
+	{
+		y = cur_section*(vid.height/4);
+		qglBlitFramebufferEXT(0, y, vid.width, y+vid.height/4, 0, y, vid.width, y+vid.height/4,
+			GL_COLOR_BUFFER_BIT, GL_LINEAR);
+		cur_section = (cur_section + 1) % 4;
+	}
+	last_time = cur_time;
 }
 
 /*
 =================
 R_Bloom_DownsampleView
+
+Creates a downscaled, blurred version of the screen, leaving it in the
+"scratch" and "effect" textures (identical in both.) This function is name is
+a bit confusing, because "downsampling" means two things here:
+ 1) Creating a scaled-down version of an image
+ 2) Converting a multisampled image to a non-multisampled image the same size,
+    which is necessary if MSAA is enabled in the graphics driver settings
+The function name uses meaning 1.
 =================
 */
 void R_Bloom_DownsampleView( void )
 {
 	qglDisable( GL_BLEND );
 	qglColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
-
-	//stepped downsample
-	if( r_screendownsamplingtexture_size )
+	
+	GL_SelectTexture (GL_TEXTURE0);
+	// FIXME: OH FFS this is so stupid: tell the GL_Bind batching mechanism 
+	// that texture unit 0 has been re-bound, as it most certainly has been.
+	gl_state.currenttextures[gl_state.currenttmu] = -1;
+	
+	if (MultiSampleEnabled != 0)
 	{
-		int      midsample_width = (r_screendownsamplingtexture_size * sampleText_tcw);
-		int      midsample_height = (r_screendownsamplingtexture_size * sampleText_tch);
-
-		//copy the screen and draw resized
-		GL_Bind(r_bloomscreentexture->texnum);
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, curView_x, viddef.height - (curView_y + curView_height), curView_width, curView_height);
-		R_Bloom_Quad( 0,  viddef.height-midsample_height, midsample_width, midsample_height, screenText_tcw, screenText_tch  );
-
-		//now copy into Downsampling (mid-sized) texture
-		GL_Bind(r_bloomdownsamplingtexture->texnum);
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, midsample_width, midsample_height);
-
-		//now draw again in bloom size
+		// If MSAA is enabled, the FBO blitting needs an extra step.
+		// Copy onto full-screen sized RBO first, to go from the multisample
+		// format of the screen to a non-multisampled format.
+		qglBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, bloom_fullsize_downsampling_rbo_FBO);
+		R_Bloom_FullsizeRBOUpdate ();
+		// Set the downsampled RBO as the read framebuffer, then run the rest
+		// of the code as normal.
+		qglBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, bloom_fullsize_downsampling_rbo_FBO);
+	}
+	
+	//stepped downsample
+	if( r_midsizetexture_size )
+	{
+		// copy into small sized FBO (equivalent to copying into full screen
+		// sized FBO and then drawing that onto the small sized FBO later.)
+		qglBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, bloomscratchFBO);
+		qglBlitFramebufferEXT(0, 0, vid.width, vid.height, 0, 0, BLOOM_SIZE, BLOOM_SIZE,
+			GL_COLOR_BUFFER_BIT, GL_LINEAR);
+		// copy into downsampling (mid-sized) FBO
+		qglBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, midsizeFBO);
+		qglBlitFramebufferEXT(0, 0, vid.width, vid.height, 0, 0, r_midsizetexture_size, r_midsizetexture_size,
+			GL_COLOR_BUFFER_BIT, GL_LINEAR);
+		
+		
+		// create the finished downsampled version of the texture by blending 
+		// the small-sized FBO and the mid-sized FBO onto a small-sized FBO,
+		// hoping it adds some blur.
+		
+		// Store first of all in the bloom effect texture, since we don't want
+		// to draw the scratch texture onto itself. 
+		qglBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, bloomeffectFBO);
+		
+		// mid-size
+		GL_Bind(r_midsizetexture->texnum);
 		qglColor4f( 0.5f, 0.5f, 0.5f, 1.0f );
-		R_Bloom_Quad( 0,  viddef.height-sample_height, sample_width, sample_height, sampleText_tcw, sampleText_tch );
-
-		//now blend the big screen texture into the bloom generation space (hoping it adds some blur)
+		R_Bloom_Quad( 0,  viddef.height-BLOOM_SIZE, BLOOM_SIZE, BLOOM_SIZE);
+		// small-size
 		qglEnable( GL_BLEND );
 		qglBlendFunc(GL_ONE, GL_ONE);
 		qglColor4f( 0.5f, 0.5f, 0.5f, 1.0f );
-		GL_Bind(r_bloomscreentexture->texnum);
-		R_Bloom_Quad( 0,  viddef.height-sample_height, sample_width, sample_height, screenText_tcw, screenText_tch );
+		GL_Bind(r_bloomscratchtexture->texnum);
+		R_Bloom_Quad( 0,  viddef.height-BLOOM_SIZE, BLOOM_SIZE, BLOOM_SIZE );
 		qglColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
 		qglDisable( GL_BLEND );
-
+		
 	} else {	//downsample simple
 
-		GL_Bind(r_bloomscreentexture->texnum);
-		qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, curView_x, viddef.height - (curView_y + curView_height), curView_width, curView_height);
-		R_Bloom_Quad( 0, viddef.height-sample_height, sample_width, sample_height, screenText_tcw, screenText_tch );
+		qglBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, bloomeffectFBO);
+		qglBlitFramebufferEXT(0, 0, vid.width, vid.height, 0, 0, BLOOM_SIZE, BLOOM_SIZE,
+			GL_COLOR_BUFFER_BIT, GL_LINEAR);
+		
 	}
+	
+	// Blit the finished downsampled texture onto a second FBO. We end up with
+	// with two copies, which GenerateDiamonds will take advantage of.
+	qglBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, bloomscratchFBO);
+	qglBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, bloomeffectFBO);
+	qglBlitFramebufferEXT(0, 0, BLOOM_SIZE, BLOOM_SIZE, 0, 0, BLOOM_SIZE, BLOOM_SIZE,
+		GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	
+	qglBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, 0);
+	qglBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, 0);
 }
 
 /*
@@ -527,6 +525,10 @@ void R_BloomBlend ( refdef_t *fd )
 
 	if( !BLOOM_SIZE )
 		R_Bloom_InitTextures();
+	
+	// previous function can set this if there's no FBO
+	if (!r_bloom->integer)
+		return;
 
 	if( screen_texture_width < BLOOM_SIZE ||
 		screen_texture_height < BLOOM_SIZE )
@@ -536,10 +538,10 @@ void R_BloomBlend ( refdef_t *fd )
 	qglViewport( 0, 0, viddef.width, viddef.height );
 	qglDisable( GL_DEPTH_TEST );
 	qglMatrixMode( GL_PROJECTION );
-    qglLoadIdentity ();
+	qglLoadIdentity ();
 	qglOrtho(0, viddef.width, viddef.height, 0, -10, 100);
 	qglMatrixMode( GL_MODELVIEW );
-    qglLoadIdentity ();
+	qglLoadIdentity ();
 	qglDisable(GL_CULL_FACE);
 
 	qglDisable( GL_BLEND );
@@ -548,49 +550,22 @@ void R_BloomBlend ( refdef_t *fd )
 	qglColor4f( 1, 1, 1, 1 );
 
 	//set up current sizes
+	// TODO: get rid of these nasty globals
 	curView_x = fd->x;
 	curView_y = fd->y;
 	curView_width = fd->width;
 	curView_height = fd->height;
-	screenText_tcw = ((float)curView_width / (float)screen_texture_width);
-	screenText_tch = ((float)curView_height / (float)screen_texture_height);
-	if( fd->height > fd->width ) {
-		sampleText_tcw = ((float)curView_width / (float)curView_height);
-		sampleText_tch = 1.0f;
-	} else {
-		sampleText_tcw = 1.0f;
-		sampleText_tch = ((float)curView_height / (float)curView_width);
-	}
-	sample_width = (BLOOM_SIZE * sampleText_tcw);
-	sample_height = (BLOOM_SIZE * sampleText_tch);
-
-	
-	//copy the screen space we'll use to work into the backup texture
-	GL_Bind(r_bloombackuptexture->texnum);
-	qglCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, r_screenbackuptexture_width, r_screenbackuptexture_height );
 
 	//create the bloom image
 	R_Bloom_DownsampleView();
 	R_Bloom_GeneratexDiamonds();
-	//R_Bloom_GeneratexCross();
-
-	//restore the screen-backup to the screen
-	qglDisable(GL_BLEND);
-	GL_Bind(r_bloombackuptexture->texnum);
-	qglColor4f( 1, 1, 1, 1 );
-	R_Bloom_Quad( 0,
-		viddef.height - r_screenbackuptexture_height,
-		r_screenbackuptexture_width,
-		r_screenbackuptexture_height,
-		1.0,
-		1.0 );
 
 	R_Bloom_DrawEffect();
 
 	qglColor3f (1,1,1);
-    qglDisable (GL_BLEND);
-    qglEnable (GL_TEXTURE_2D);
-    qglBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    qglDepthMask (1);
+	qglDisable (GL_BLEND);
+	qglEnable (GL_TEXTURE_2D);
+	qglBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	qglDepthMask (1);
 }
 

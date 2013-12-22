@@ -167,7 +167,6 @@ extern cvar_t	*r_overbrightbits;
 extern cvar_t	*gl_normalmaps;
 extern cvar_t	*gl_bspnormalmaps;
 extern cvar_t	*gl_shadowmaps;
-extern cvar_t	*gl_glsl_postprocess;
 extern cvar_t	*gl_fog;
 
 extern	cvar_t	*r_shaders;
@@ -262,14 +261,14 @@ extern void V_AddBlend (float r, float g, float b, float a, float *v_blend);
 extern int	R_Init( void *hinstance, void *hWnd );
 extern void R_Shutdown( void );
 
+extern void R_SetupViewport (void);
 extern void R_RenderView (refdef_t *fd);
 extern void GL_ScreenShot_f (void);
 extern void R_DrawAliasModel (void);
 extern void R_DrawBrushModel (void);
-extern void R_DrawWorld (void);
+extern void R_DrawWorldSurfs (void);
 extern void R_RenderDlights (void);
 extern void R_DrawAlphaSurfaces (void);
-extern void R_DrawRSSurfaces(void);
 extern void R_InitParticleTexture (void);
 extern void R_DrawParticles (void);
 extern void R_DrawRadar(void);
@@ -284,7 +283,7 @@ extern qboolean R_CullBox (vec3_t mins, vec3_t maxs);
 extern qboolean R_CullOrigin(vec3_t origin);
 extern qboolean R_CullSphere( const vec3_t centre, const float radius, const int clipflags );
 extern void R_RotateForEntity (entity_t *e);
-extern void R_MarkLeaves (void);
+extern void R_MarkWorldSurfs (void);
 extern void R_AddSkySurface (msurface_t *fa);
 extern void R_RenderWaterPolys (msurface_t *fa, int texnum, float scaleX, float scaleY);
 extern void R_ReadFogScript(char config_file[128]);
@@ -305,7 +304,6 @@ extern image_t *r_blooddroplets;
 extern image_t *r_blooddroplets_nm;
 extern void BSP_DrawTexturelessPoly (msurface_t *fa);
 extern void BSP_DrawTexturelessBrushModel (entity_t *e);
-extern void BSP_RenderBrushPoly (msurface_t *fa);
 
 //Postprocess
 void R_GLSLPostProcess(void);
@@ -381,13 +379,10 @@ int r_teamColor;
 qboolean r_gotFlag;
 qboolean r_lostFlag;
 
-extern void	Draw_GetPicSize (int *w, int *h, char *name);
-extern void	Draw_Pic (int x, int y, char *name);
-extern void	Draw_ScaledPic (int x, int y, float scale, char *pic);
-extern void	Draw_StretchPic (int x, int y, int w, int h, char *name);
-extern void	Draw_ScaledChar(float x, float y, int num, float scale, int from_menu);
-extern void	Draw_ScaledColorChar (float x, float y, int num, vec4_t color, float scale, int from_menu);
-extern void	Draw_Fill (int x, int y, int w, int h, int c);
+extern void	Draw_GetPicSize (int *w, int *h, const char *name);
+extern void	Draw_Pic (float x, float y, const char *name);
+extern void	Draw_ScaledPic (float x, float y, float scale, const char *pic);
+extern void	Draw_StretchPic (float x, float y, float w, float h, const char *name);
 extern void	Draw_FadeScreen (void);
 
 extern void	R_BeginFrame( float camera_separation );
@@ -395,14 +390,13 @@ extern void	R_SwapBuffers( int );
 extern void	R_SetPalette ( const unsigned char *palette);
 extern int	Draw_GetPalette (void);
 
-extern void	GL_ResampleTexture (unsigned *in, int inwidth, int inheight, unsigned *out,  int outwidth, int outheight);
-
 image_t *R_RegisterSkin (char *name);
 image_t *R_RegisterParticlePic(const char *name);
 image_t *R_RegisterParticleNormal(const char *name);
 image_t *R_RegisterGfxPic(const char *name);
 
 extern void	LoadPCX (char *filename, byte **pic, byte **palette, int *width, int *height);
+extern image_t *GL_FindFreeImage (char *name, int width, int height, imagetype_t type);
 extern image_t *GL_LoadPic (char *name, byte *pic, int width, int height, imagetype_t type, int bits);
 extern image_t *GL_GetImage( const char * name );
 extern image_t	*GL_FindImage (char *name, imagetype_t type);
@@ -601,6 +595,7 @@ typedef struct	LightGroup
 } LightGroup_t;
 extern			LightGroup_t LightGroups[MAX_LIGHTS];
 
+extern void		R_CheckFBOExtensions (void);
 extern void		R_GenerateShadowFBO(void);
 extern void		MD2_DrawCaster (void);
 extern void		IQM_DrawCaster (void);
@@ -769,7 +764,7 @@ extern void IQM_AnimateFrame(float curframe, int nextframe);
 extern qboolean IQM_InAnimGroup(int frame, int oldframe);
 extern int IQM_NextFrame(int frame);
 extern void IQM_AnimateRagdoll(int RagDollID, int shellEffect);
-extern void IQM_DrawRagDollFrame(int RagDollID, int skinnum, float shellAlpha, int shellEffect);
+extern void IQM_DrawFrame(int skinnum, qboolean ragdoll, float shellAlpha);
 extern void IQM_DrawShadow(vec3_t origin);
 
 //Ragdoll

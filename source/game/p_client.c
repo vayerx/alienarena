@@ -28,6 +28,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 /* Number of gibs to throw on death with lots of damage (including Client Head, where applicable) */
 #define DEATH_GIBS_TO_THROW 5
 void ClientUserinfoChanged (edict_t *ent, char *userinfo, int whereFrom);
+void ClientDisconnect (edict_t *ent);
 void SP_misc_teleporter_dest (edict_t *ent);
 
 /*QUAKED info_player_start (1 0 0) (-16 -16 -24) (16 16 32)
@@ -636,7 +637,7 @@ void TossClientWeapon (edict_t *self)
 	}
 
 	item = self->client->pers.weapon;
-	if (! self->client->pers.inventory[self->client->ammo_index] )
+	if (!self->client->pers.inventory[self->client->ammo_index] )
 		item = NULL;
 
 #ifdef ALTERIA
@@ -656,59 +657,139 @@ void TossClientWeapon (edict_t *self)
 	if (g_tactical->integer && item && (strcmp (item->pickup_name, "Alien Vaporizer") == 0))
 		item = NULL;
 #endif
-	if (!(dmflags->integer & DF_QUAD_DROP))
-		quad = false;
+
+	if(g_tactical->integer)
+	{
+		//always drop your weapon on death, even if it isn't the current held item.
+		if(self->client->pers.inventory[ITEM_INDEX(FindItem("Flame Thrower"))] == 1)
+		{
+			item = FindItem( "Flame Thrower" );
+			if(item)
+			{
+				spread = 0;
+				self->client->v_angle[YAW] -= spread;
+				drop = Drop_Item (self, item);
+				self->client->v_angle[YAW] += spread;
+				drop->spawnflags = DROPPED_PLAYER_ITEM;
+			}
+		}
+		if(self->client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] == 1)
+		{	
+			item = FindItem( "Rocket Launcher" );
+			if(item)
+			{
+				spread = 35;
+				self->client->v_angle[YAW] -= spread;
+				drop = Drop_Item (self, item);
+				self->client->v_angle[YAW] += spread;
+				drop->spawnflags = DROPPED_PLAYER_ITEM;
+			}
+		}
+		if(self->client->pers.inventory[ITEM_INDEX(FindItem("Pulse Rifle"))] == 1)
+		{	
+			item = FindItem( "Pulse Rifle" );
+			if(item)
+			{
+				spread = 70;
+				self->client->v_angle[YAW] -= spread;
+				drop = Drop_Item (self, item);
+				self->client->v_angle[YAW] += spread;
+				drop->spawnflags = DROPPED_PLAYER_ITEM;
+			}
+		}
+		if(self->client->pers.inventory[ITEM_INDEX(FindItem("Disruptor"))] == 1)
+		{	
+			item = FindItem( "Disruptor" );
+			if(item)
+			{
+				spread = 105;
+				self->client->v_angle[YAW] -= spread;
+				drop = Drop_Item (self, item);
+				self->client->v_angle[YAW] += spread;
+				drop->spawnflags = DROPPED_PLAYER_ITEM;
+			}
+		}
+		if(self->client->pers.inventory[ITEM_INDEX(FindItem("Alien Disruptor"))] == 1)
+		{
+			item = FindItem( "Alien Disruptor" );
+			if(item)
+			{
+				spread = 140;
+				self->client->v_angle[YAW] -= spread;
+				drop = Drop_Item (self, item);
+				self->client->v_angle[YAW] += spread;
+				drop->spawnflags = DROPPED_PLAYER_ITEM;
+			}
+		}
+		if(self->client->pers.inventory[ITEM_INDEX(FindItem("Alien Smartgun"))] == 1)
+		{	
+			item = FindItem( "Alien Smartgun" );
+			if(item)
+			{
+				spread = 175;
+				self->client->v_angle[YAW] -= spread;
+				drop = Drop_Item (self, item);
+				self->client->v_angle[YAW] += spread;
+				drop->spawnflags = DROPPED_PLAYER_ITEM;
+			}
+		}
+	}
 	else
-		quad = (self->client->quad_framenum > (level.framenum + 10));
-
-	sproing = (self->client->sproing_framenum > (level.framenum + 10));
-	haste = (self->client->haste_framenum > (level.framenum + 10));
-
-	if ((item && quad) || (item && haste) || (item && sproing))
-		spread = 22.5;
-	else
-		spread = 0.0;
-
-	if (item)
 	{
-		self->client->v_angle[YAW] -= spread;
-		drop = Drop_Item (self, item);
-		self->client->v_angle[YAW] += spread;
-		drop->spawnflags = DROPPED_PLAYER_ITEM;
-	}
+		if (!(dmflags->integer & DF_QUAD_DROP))
+			quad = false;
+		else
+			quad = (self->client->quad_framenum > (level.framenum + 10));
 
-	if (quad)
-	{
-		self->client->v_angle[YAW] += spread;
-		drop = Drop_Item (self, FindItemByClassname ("item_quad"));
-		self->client->v_angle[YAW] -= spread;
-		drop->spawnflags |= DROPPED_PLAYER_ITEM;
+		sproing = (self->client->sproing_framenum > (level.framenum + 10));
+		haste = (self->client->haste_framenum > (level.framenum + 10));
 
-		drop->touch = Touch_Item;
-		drop->nextthink = level.time + (self->client->quad_framenum - level.framenum) * FRAMETIME;
-		drop->think = G_FreeEdict;
-	}
-	if (sproing && !self->client->resp.powered)
-	{
-		self->client->v_angle[YAW] += spread;
-		drop = Drop_Item (self, FindItemByClassname ("item_sproing"));
-		self->client->v_angle[YAW] -= spread;
-		drop->spawnflags |= DROPPED_PLAYER_ITEM;
+		if ((item && quad) || (item && haste) || (item && sproing))
+			spread = 22.5;
+		else
+			spread = 0.0;
 
-		drop->touch = Touch_Item;
-		drop->nextthink = level.time + (self->client->sproing_framenum - level.framenum) * FRAMETIME;
-		drop->think = G_FreeEdict;
-	}
-	if (haste && !self->client->resp.powered)
-	{
-		self->client->v_angle[YAW] += spread;
-		drop = Drop_Item (self, FindItemByClassname ("item_haste"));
-		self->client->v_angle[YAW] -= spread;
-		drop->spawnflags |= DROPPED_PLAYER_ITEM;
+		if (item)
+		{
+			self->client->v_angle[YAW] -= spread;
+			drop = Drop_Item (self, item);
+			self->client->v_angle[YAW] += spread;
+			drop->spawnflags = DROPPED_PLAYER_ITEM;
+		}
 
-		drop->touch = Touch_Item;
-		drop->nextthink = level.time + (self->client->haste_framenum - level.framenum) * FRAMETIME;
-		drop->think = G_FreeEdict;
+		if (quad)
+		{
+			self->client->v_angle[YAW] += spread;
+			drop = Drop_Item (self, FindItemByClassname ("item_quad"));
+			self->client->v_angle[YAW] -= spread;
+			drop->spawnflags |= DROPPED_PLAYER_ITEM;
+
+			drop->touch = Touch_Item;
+			drop->nextthink = level.time + (self->client->quad_framenum - level.framenum) * FRAMETIME;
+			drop->think = G_FreeEdict;
+		}
+		if (sproing && !self->client->resp.powered)
+		{
+			self->client->v_angle[YAW] += spread;
+			drop = Drop_Item (self, FindItemByClassname ("item_sproing"));
+			self->client->v_angle[YAW] -= spread;
+			drop->spawnflags |= DROPPED_PLAYER_ITEM;
+
+			drop->touch = Touch_Item;
+			drop->nextthink = level.time + (self->client->sproing_framenum - level.framenum) * FRAMETIME;
+			drop->think = G_FreeEdict;
+		}
+		if (haste && !self->client->resp.powered)
+		{
+			self->client->v_angle[YAW] += spread;
+			drop = Drop_Item (self, FindItemByClassname ("item_haste"));
+			self->client->v_angle[YAW] -= spread;
+			drop->spawnflags |= DROPPED_PLAYER_ITEM;
+
+			drop->touch = Touch_Item;
+			drop->nextthink = level.time + (self->client->haste_framenum - level.framenum) * FRAMETIME;
+			drop->think = G_FreeEdict;
+		}	
 	}
 }
 
@@ -837,23 +918,26 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 			Cmd_Score_f( self );
 		}
 
-		if(self->health < -40 && attacker->client) 
+		if(attacker)
 		{
-			attacker->client->resp.reward_pts++;
-			if(attacker->client->resp.reward_pts >= g_reward->integer && !attacker->client->resp.powered) 
-			{	//give them speed and invis powerups
-				it = FindItem("Invisibility");
-				attacker->client->pers.inventory[ITEM_INDEX(it)] += 1;
+			if(self->health < -40 && attacker->client) 
+			{
+				attacker->client->resp.reward_pts++;
+				if(attacker->client->resp.reward_pts >= g_reward->integer && !attacker->client->resp.powered) 
+				{	//give them speed and invis powerups
+					it = FindItem("Invisibility");
+					attacker->client->pers.inventory[ITEM_INDEX(it)] += 1;
 
-				it = FindItem("Sproing");
-				attacker->client->pers.inventory[ITEM_INDEX(it)] += 1;
+					it = FindItem("Sproing");
+					attacker->client->pers.inventory[ITEM_INDEX(it)] += 1;
 
-				it = FindItem("Haste");
-				attacker->client->pers.inventory[ITEM_INDEX(it)] += 1;
+					it = FindItem("Haste");
+					attacker->client->pers.inventory[ITEM_INDEX(it)] += 1;
 
-				attacker->client->resp.powered = true;
+					attacker->client->resp.powered = true;
 
-				gi.sound (attacker, CHAN_VOICE, gi.soundindex("misc/pc_up.wav"), 1, ATTN_STATIC, 0);
+					gi.sound (attacker, CHAN_VOICE, gi.soundindex("misc/pc_up.wav"), 1, ATTN_STATIC, 0);
+				}
 			}
 		}
 	}
@@ -877,6 +961,7 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 		{
 			/* If deathcam is active, switch client model to nothing */
 			self->s.modelindex = 0;
+			self->s.effects = 0; 
 			self->solid = SOLID_NOT;
 
 			number_of_gibs = DEATH_GIBS_TO_THROW;
@@ -1061,6 +1146,7 @@ void InitClientPersistant (gclient_t *client)
 		client->pers.max_cells		= g_maxcells->value * 2.5;
 		client->pers.max_slugs		= g_maxslugs->value * 10;
 		client->pers.max_seekers	= g_maxseekers->value * 3;
+		client->pers.max_bombs		= g_maxbombs->value * 2;
 
 		client->pers.inventory[ITEM_INDEX(FindItem("Rocket Launcher"))] = 1;
 		client->pers.inventory[ITEM_INDEX(FindItem("rockets"))] = g_maxrockets->value * 10;
@@ -1077,6 +1163,7 @@ void InitClientPersistant (gclient_t *client)
 		client->pers.inventory[ITEM_INDEX(FindItem("napalm"))] = g_maxgrenades->value * 10;
 		client->pers.inventory[ITEM_INDEX(FindItem("Minderaser"))] = 1;
 		client->pers.inventory[ITEM_INDEX(FindItem("seekers"))] = g_maxseekers->value * 3;
+		client->pers.inventory[ITEM_INDEX(FindItem("bombs"))] = g_maxbombs->value * 2;
 	} 
 	else 
 	{
@@ -1088,6 +1175,7 @@ void InitClientPersistant (gclient_t *client)
 		client->pers.max_cells		= g_maxcells->value;
 		client->pers.max_slugs		= g_maxslugs->value;
 		client->pers.max_seekers	= g_maxseekers->value;
+		client->pers.max_bombs		= g_maxbombs->value;
 	}
 
 	if(vampire->value)
@@ -1402,17 +1490,27 @@ edict_t *SelectCTFSpawnPoint (edict_t *ent)
 	float	range, range1, range2;
 	char	*cname;
 
-
-	switch (ent->dmteam) {
-	case RED_TEAM:
-		cname = "info_player_red";
-		break;
-	case BLUE_TEAM:
-		cname = "info_player_blue";
-		break;
-	case NO_TEAM:
-	default:
-		return SelectRandomCTFSpawnPoint();
+	if(g_tactical->value)
+	{
+		if(ent->ctype == 1)
+			cname = "info_player_red";
+		else
+			cname = "info_player_blue";
+	}
+	else
+	{
+		switch (ent->dmteam) 
+		{
+			case RED_TEAM:
+				cname = "info_player_red";
+				break;
+			case BLUE_TEAM:
+				cname = "info_player_blue";
+				break;
+			case NO_TEAM:
+			default:
+				return SelectRandomCTFSpawnPoint();
+		}
 	}
 
 	spot = NULL;
@@ -1470,13 +1568,16 @@ void	SelectSpawnPoint (edict_t *ent, vec3_t origin, vec3_t angles)
 {
 	edict_t	*spot = NULL;
 
-	if (deathmatch->value) {
-		if (ctf->value || tca->value || cp->value || (dmflags->integer & DF_SKINTEAMS)) {
+	if (deathmatch->value) 
+	{
+		if (g_tactical->value || ctf->value || tca->value || cp->value || (dmflags->integer & DF_SKINTEAMS)) 
+		{			
 			spot = SelectCTFSpawnPoint(ent);
 			if(!spot)
 				spot = SelectDeathmatchSpawnPoint ();
 		}
-		else {
+		else 
+		{
 			spot = SelectDeathmatchSpawnPoint ();
 			if(!spot)
 				spot = SelectCTFSpawnPoint(ent); //dm on team based maps
@@ -1527,6 +1628,7 @@ void BodySink( edict_t *ent ) {
 		ent->s.modelindex2 = 0;
 		ent->s.modelindex3 = 0;
 		ent->s.modelindex4 = 0;
+		ent->s.effects = 0;
 		return;
 	}
 	ent->nextthink = level.time + .1;
@@ -1812,7 +1914,7 @@ void ParseClassFile( char *config_file, edict_t *ent )
 						ent->client->pers.inventory[ITEM_INDEX(FindItem("Body Armor"))] += 50;
 						break;
 					case 3:
-						ent->client->pers.inventory[ITEM_INDEX(FindItem("Jacket Armor"))] += 30;
+						ent->client->pers.inventory[ITEM_INDEX(FindItem("Combat Armor"))] += 100;
 						break;
 				}
 
@@ -1827,7 +1929,6 @@ void ParseClassFile( char *config_file, edict_t *ent )
 					ent->client->pers.inventory[ITEM_INDEX(FindItem("Alien Vaporizer"))] = 1;
 					ent->client->pers.inventory[ITEM_INDEX(FindItem("slugs"))] = 4;
 				}
-
 			}
 		
 			free( buffer );
@@ -1866,7 +1967,8 @@ void PutClientInServer (edict_t *ent)
 	// find a spawn point
 	// do it before setting health back up, so farthest
 	// ranging doesn't count this client
-	SelectSpawnPoint (ent, spawn_origin, spawn_angles);
+	if(!g_tactical->integer)
+		SelectSpawnPoint (ent, spawn_origin, spawn_angles);
 
 	index = ent-g_edicts-1;
 	client = ent->client;
@@ -1938,11 +2040,7 @@ void PutClientInServer (edict_t *ent)
 
 	// clear playerstate values
 	memset (&ent->client->ps, 0, sizeof(client->ps));
-
-	client->ps.pmove.origin[0] = spawn_origin[0]*8;
-	client->ps.pmove.origin[1] = spawn_origin[1]*8;
-	client->ps.pmove.origin[2] = spawn_origin[2]*8;
-
+	
 	//remove these if there are there
 	if(ent->client->oldplayer)
 		G_FreeEdict (ent->client->oldplayer);
@@ -2025,6 +2123,7 @@ void PutClientInServer (edict_t *ent)
 #else
 	ent->ctype = 0; //alien is default
 	sprintf(modelpath, "players/%s/human", playermodel);
+	sprintf(ent->charModel, playermodel);
 	Q2_FindFile (modelpath, &file);
 	if(file) 
 	{ 
@@ -2046,7 +2145,11 @@ void PutClientInServer (edict_t *ent)
 				//0-1 (has vaporizor)
 			
 				ParseClassFile(modelpath, ent); 
-				
+				if(ent->has_bomb)
+				{
+					ent->client->pers.inventory[ITEM_INDEX(FindItem("Human Bomb"))] = 1;
+					ent->client->pers.inventory[ITEM_INDEX(FindItem("bombs"))] = 1; //tactical note - humans will use same ammo, etc, just different weapons
+				}				
 				item = FindItem("Blaster");
 			}
 			else
@@ -2083,6 +2186,7 @@ void PutClientInServer (edict_t *ent)
 		else
 		{ 
 			//alien
+			ent->ctype = 0;
 			if(g_tactical->integer || (classbased->value && !(rocket_arena->integer || instagib->integer || insta_rockets->value || excessive->value)))
 			{
 				ent->health = ent->max_health = client->pers.max_health = client->pers.health = 150;
@@ -2092,7 +2196,12 @@ void PutClientInServer (edict_t *ent)
 					Q2_FindFile (modelpath, &file);
 					if(file)
 					{
-						ParseClassFile(modelpath, ent); 						
+						ParseClassFile(modelpath, ent); 		
+						if(ent->has_bomb)
+						{
+							ent->client->pers.inventory[ITEM_INDEX(FindItem("Alien Bomb"))] = 1;
+							ent->client->pers.inventory[ITEM_INDEX(FindItem("bombs"))] = 1; //tactical note - humans will use same ammo, etc, just different weapons
+						}
 					}
 					item = FindItem("Blaster");
 					client->pers.selected_item = ITEM_INDEX(item);
@@ -2113,6 +2222,14 @@ void PutClientInServer (edict_t *ent)
 		}
 	}
 #endif
+
+	//has to be done after determining the class/team - note - we don't care about spawn distances in tactical
+	if(g_tactical->integer)
+		SelectSpawnPoint (ent, spawn_origin, spawn_angles);
+
+	client->ps.pmove.origin[0] = spawn_origin[0]*8;
+	client->ps.pmove.origin[1] = spawn_origin[1]*8;
+	client->ps.pmove.origin[2] = spawn_origin[2]*8;
 
 	ent->s.frame = 0;
 	VectorCopy (spawn_origin, ent->s.origin);
@@ -2331,6 +2448,25 @@ void ClientBeginDeathmatch (edict_t *ent)
 	if(!ent->client->pers.spectator) //fixes invisible player bugs caused by leftover svf_noclients
 		ent->svflags &= ~SVF_NOCLIENT;
 	PutClientInServer (ent);
+
+	//kick and blackhole a player in tactical that is not using an authorized character!
+	if(g_tactical->integer)
+	{
+		//we want to actually check their model to be one of the valid ones we use
+		if(strcmp("martianenforcer", ent->charModel) && strcmp("martianwarrior", ent->charModel) && strcmp("martianoverlord", ent->charModel)
+			&& strcmp("lauren", ent->charModel) && strcmp("enforcer", ent->charModel) && strcmp("commander", ent->charModel))
+		{
+			if ( ent->is_bot )
+			{
+				ACESP_KickBot( ent );
+			}
+			else
+			{
+				safe_bprintf(PRINT_HIGH, "%s was kicked for using invalid character class!\n", ent->client->pers.netname);
+				ClientDisconnect (ent);
+			}
+		}
+	}
 
 	//in ctf, initially start in chase mode, and allow them to choose a team
 	if( TEAM_GAME ) 
@@ -2914,6 +3050,8 @@ void ClientDisconnect (edict_t *ent)
 
 	gi.unlinkentity (ent);
 	ent->s.modelindex = 0;
+	ent->s.effects = 0;
+	ent->s.sound = 0;
 	ent->solid = SOLID_NOT;
 	ent->inuse = false;
 	ent->classname = "disconnected";
@@ -3356,6 +3494,19 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 			pm.snapinitial = true;
 		}
 
+		if(g_tactical->integer)
+		{
+			//limit acceleration
+			if(ucmd->forwardmove > 200)
+				ucmd->forwardmove = 200;
+			if(ucmd->forwardmove < -200)
+				ucmd->forwardmove = -200;
+			if(ucmd->sidemove > 200)
+				ucmd->sidemove = 200;
+			if(ucmd->sidemove < -200)
+				ucmd->sidemove = -200;
+		}
+
 		ucmd->forwardmove *= 1.3;
 
 		//tactical
@@ -3446,9 +3597,7 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 		for (i=0 ; i<3 ; i++)
 		{
 			ent->s.origin[i] = pm.s.origin[i]*0.125;
-			//vehicles
-			if ( !Jet_Active(ent) || (Jet_Active(ent)&&(fabs((float)pm.s.velocity[i]*0.125) < fabs(ent->velocity[i]))) )
-				ent->velocity[i] = pm.s.velocity[i]*0.125;
+			ent->velocity[i] = pm.s.velocity[i]*0.125;
 		}
 
 		//check for a dodge, and peform if true

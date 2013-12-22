@@ -219,7 +219,6 @@ void IN_DeactivateMouse (void)
 IN_StartupMouse
 ===========
 */
-void refreshCursorMenu(void);
 void refreshCursorLink (void);
 void IN_StartupMouse (void)
 {
@@ -229,8 +228,6 @@ void IN_StartupMouse (void)
 	if ( !cv->value )
 		return;
 
-	// Knightmare- added Psychospaz's menu mouse support
-	refreshCursorMenu();
 	refreshCursorLink();
 
 	cursor.mouseaction = false;
@@ -298,7 +295,6 @@ void IN_MouseEvent (int mstate)
 			{	//mouse let go
 				cursor.buttondown[i] = false;
 				cursor.buttonused[i] = false;
-				cursor.mouseaction = true;
 			}
 		}
 	}
@@ -747,7 +743,7 @@ void IN_JoyMove (usercmd_t *cmd)
 		return;
 	}
 
-	if ( (in_speed.state & 1) ^ cl_run->integer)
+	if (!cl.tactical && ( (in_speed.state & 1) ^  cl_run->integer))
 		speed = 2;
 	else
 		speed = 1;

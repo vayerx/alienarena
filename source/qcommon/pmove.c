@@ -29,6 +29,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define	STEPSIZE	18
 
 extern cvar_t *sv_joustmode;
+extern cvar_t *sv_tactical;
+extern cvar_t *sv_excessive;
 
 // all of the locals will be zeroed before each
 // pmove, just to make damn sure we don't have
@@ -543,6 +545,13 @@ void PM_WaterMove (void)
 	float	wishspeed;
 	vec3_t	wishdir;
 
+	if(sv_tactical->value)
+		pm_maxspeed = 200;
+	else if(sv_excessive->value)
+		pm_maxspeed = 450;
+	else
+		pm_maxspeed = remoteserver_runspeed;
+
 //
 // user intentions
 //
@@ -586,6 +595,13 @@ void PM_AirMove (void)
 	vec3_t		wishdir;
 	float		wishspeed;
 	float		maxspeed;
+
+	if(sv_tactical->value)
+		pm_maxspeed = 200;
+	else if(sv_excessive->value)
+		pm_maxspeed = 450;
+	else 
+		pm_maxspeed = remoteserver_runspeed;
 
 	fmove = pm->cmd.forwardmove;
 	smove = pm->cmd.sidemove;
@@ -912,6 +928,13 @@ void PM_FlyMove (qboolean doclip)
 	vec3_t		end;
 	trace_t	trace;
 
+	if(sv_tactical->value)
+		pm_maxspeed = 200;
+	else if(sv_excessive->value)
+		pm_maxspeed = 450;
+	else 
+		pm_maxspeed = remoteserver_runspeed;
+
 	pm->viewheight = 22;
 
 	// friction
@@ -1103,7 +1126,7 @@ void PM_SnapPosition (void)
 {
 	int		sign[3];
 	int		i, j, bits;
-	short	base[3];
+	int 	base[3];
 	// try all single bits first
 	static int jitterbits[8] = {0,4,1,2,3,5,6,7};
 
@@ -1189,7 +1212,7 @@ PM_InitialSnapPosition
 void PM_InitialSnapPosition(void)
 {
 	int        x, y, z;
-	short      base[3];
+	int        base[3];
 	static int offset[3] = { 0, -1, 1 };
 
 	VectorCopy (pm->s.origin, base);

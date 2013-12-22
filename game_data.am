@@ -105,6 +105,7 @@ nobase_dist_botinfo_DATA = \
 	botinfo/dm-warmachine2k10.tmp \
 	botinfo/dm-zion2k9.tmp \
 	botinfo/dm-zorn2k11.tmp \
+	botinfo/tac-extermination.tmp \
 	botinfo/nav/aoa-atlantis.nod \
 	botinfo/nav/aoa-corrosion.nod \
 	botinfo/nav/aoa-frost2k9.nod \
@@ -161,10 +162,12 @@ nobase_dist_botinfo_DATA = \
 	botinfo/nav/dm-warmachine2k10.nod \
 	botinfo/nav/dm-zion2k9.nod \
 	botinfo/nav/dm-zorn2k11.nod \
+	botinfo/nav/tac-extermination.nod \
 	botinfo/nav/tca-corrosion.nod \
 	botinfo/nav/tca-cryogenic.nod \
 	botinfo/nav/tca-europa2k8.nod \
 	botinfo/nav/tca-frost.nod \
+	botinfo/nav/tca-invasion.nod \
 	botinfo/nav/tca-purgatory.nod \
 	botinfo/nav/tca-titan2k8.nod \
 	botinfo/nav/tca-zion.nod \
@@ -248,12 +251,11 @@ nobase_nodist_fonts_DATA = \
 	data1/fonts/bluehigd.ttf \
 	data1/fonts/chicomono.ttf \
 	data1/fonts/creativeblock.ttf \
-	data1/fonts/default.tga \
-	data1/fonts/digital.tga \
-	data1/fonts/fat.tga \
 	data1/fonts/freemono.ttf \
 	data1/fonts/freesans.ttf \
-	data1/fonts/menu.tga
+	data1/fonts/orbitron.ttf \
+	data1/fonts/crackdown.ttf \
+	data1/fonts/bendable.ttf 
 
 
 gfxdir = $(pkgdatadir)
@@ -339,8 +341,6 @@ nobase_nodist_gfx_DATA = \
 	data1/gfx/greencircuit.tga \
 	data1/gfx/greenlightning.tga \
 	data1/gfx/greenline.tga \
-	data1/gfx/hastebase.tga \
-	data1/gfx/hastemask.tga \
 	data1/gfx/hconsole2.tga \
 	data1/gfx/hconsole3.tga \
 	data1/gfx/hconsole.tga \
@@ -350,6 +350,8 @@ nobase_nodist_gfx_DATA = \
 	data1/gfx/m_banner_main_mask.tga \
 	data1/gfx/menubar1.tga \
 	data1/gfx/menubar2.tga \
+	data1/gfx/menubar3.tga \
+	data1/gfx/menubar4.tga \
 	data1/gfx/metal3glow.tga \
 	data1/gfx/metalenvmap.jpg \
 	data1/gfx/minderaser_fx.tga \
@@ -532,6 +534,8 @@ nobase_nodist_levelshots_DATA = \
 	data1/levelshots/dm-zorn2k11.txt \
 	data1/levelshots/dm-zion2k9.jpg \
 	data1/levelshots/dm-zion2k9.txt \
+	data1/levelshots/tac-extermination.jpg \
+	data1/levelshots/tac-extermination.txt \
 	data1/levelshots/tca-corrosion.jpg \
 	data1/levelshots/tca-corrosion.txt \
 	data1/levelshots/tca-cryogenic.jpg \
@@ -626,6 +630,8 @@ nobase_nodist_maps_DATA = \
 	data1/maps/dm-warmachine2k10.lightmap \
  	data1/maps/dm-zorn2k11.bsp \
 	data1/maps/dm-zion2k9.bsp \
+	data1/maps/tac-extermination.bsp \
+	data1/maps/tac-extermination.lightmap \
 	data1/maps/tca-corrosion.bsp \
 	data1/maps/tca-corrosion.lightmap \
 	data1/maps/tca-cryogenic.bsp \
@@ -887,6 +893,7 @@ nobase_nodist_maps_DATA = \
 	data1/maps/meshes/urban/bluelantern_fx.tga \
 	data1/maps/meshes/urban/bluelantern.jpg \
 	data1/maps/meshes/urban/bluelantern.md2 \
+	data1/maps/meshes/urban/lantern_normal.jpg \
 	data1/maps/meshes/urban/mercedes.jpg \
 	data1/maps/meshes/urban/mercedes.md2 \
 	data1/maps/meshes/urban/orangelantern_fx.tga \
@@ -1038,6 +1045,8 @@ nobase_nodist_maps_DATA = \
 	data1/maps/scripts/dm-zorn2k11.fog \
 	data1/maps/scripts/dm-zorn2k11.mus \
 	data1/maps/scripts/dm-zion2k9.mus \
+	data1/maps/scripts/tac-extermination.fog \
+	data1/maps/scripts/tac-extermination.mus \
 	data1/maps/scripts/tca-corrosion.fog \
 	data1/maps/scripts/tca-corrosion.mus \
 	data1/maps/scripts/tca-cryogenic.fog \
@@ -1116,6 +1125,21 @@ nobase_nodist_models_DATA = \
 	data1/models/misc/deathray/deathray.md2 \
 	data1/models/misc/deathray/deathray_normal.tga \
 	data1/models/misc/deathray/deathray.tga \
+	data1/models/misc/electrode/cover.md2 \
+	data1/models/misc/electrode/electrode.tga \
+	data1/models/misc/electrode/tris.md2 \
+	data1/models/misc/lamp2/lamp2.tga \
+	data1/models/misc/lamp2/tris.md2 \
+	data1/models/misc/lamp/lamp.tga \
+	data1/models/misc/lamp/tris.md2 \
+	data1/models/misc/pod/pod.tga \
+	data1/models/misc/pod/tris.md2 \
+	data1/models/misc/receptor/bulb.md2 \
+	data1/models/misc/receptor/receptor.tga \
+	data1/models/misc/receptor/tris.md2 \
+	data1/models/misc/scope/cover.md2 \
+	data1/models/misc/scope/scope.tga \
+	data1/models/misc/scope/tris.md2 \
 	data1/models/misc/spiderpod/helmet.iqm \
 	data1/models/misc/spiderpod/helmet.md2 \
 	data1/models/misc/spiderpod/skin.tga \
@@ -1125,6 +1149,9 @@ nobase_nodist_models_DATA = \
 	data1/models/misc/spiderpod/tris.iqm \
 	data1/models/misc/spiderpod/tris.md2 \
 	data1/models/misc/spiderpod/tris.skin \
+	data1/models/misc/tube/cover.md2 \
+	data1/models/misc/tube/tris.md2 \
+	data1/models/misc/tube/tube.tga \
 	data1/models/objects/blank/skin.tga \
 	data1/models/objects/blank/tris.md2 \
 	data1/models/objects/brass/skin.jpg \
@@ -1149,6 +1176,9 @@ nobase_nodist_models_DATA = \
 	data1/models/objects/gibs/skin_normal.jpg \
 	data1/models/objects/gibs/sm_meat/skin.jpg \
 	data1/models/objects/gibs/sm_meat/tris.md2 \
+	data1/models/objects/icon/icon.jpg \
+	data1/models/objects/icon/icon_normal.jpg \
+	data1/models/objects/icon/tris.md2 \
 	data1/models/objects/laser/skin.tga \
 	data1/models/objects/laser/tris.md2 \
 	data1/models/objects/rocket/skin.tga \
@@ -1162,7 +1192,59 @@ nobase_nodist_models_DATA = \
 	data1/models/objects/spud/skin_fx.tga \
 	data1/models/objects/spud/skin_normal.jpg \
 	data1/models/objects/spud/skin.tga \
+	data1/models/objects/spud/spud.mdo \
 	data1/models/objects/spud/tris.md2 \
+	data1/models/tactical/abackupgen_fx.tga \
+	data1/models/tactical/abackupgen.jpg \
+	data1/models/tactical/abackupgen_normal.jpg \
+	data1/models/tactical/abomb_fx.tga \
+	data1/models/tactical/abomb.jpg \
+	data1/models/tactical/abomb_normal.tga \
+	data1/models/tactical/acomputer_fx.tga \
+	data1/models/tactical/acomputer_normal.tga \
+	data1/models/tactical/acomputer.tga \
+	data1/models/tactical/alaser_fx.tga \
+	data1/models/tactical/alaser.jpg \
+	data1/models/tactical/alien_backupgen.iqm \
+	data1/models/tactical/alien_backupgen.skin \
+	data1/models/tactical/alien_bomb.iqm \
+	data1/models/tactical/alien_bomb.skin \
+	data1/models/tactical/alien_computer.iqm \
+	data1/models/tactical/alien_computer.skin \
+	data1/models/tactical/alien_laser.iqm \
+	data1/models/tactical/alien_laser.md2 \
+	data1/models/tactical/alien_laser.skin \
+	data1/models/tactical/alien_powersrc.iqm \
+	data1/models/tactical/alien_powersrc.skin \
+	data1/models/tactical/ammopad.md2 \
+	data1/models/tactical/apowersrc_fx.tga \
+	data1/models/tactical/apowersrc.jpg \
+	data1/models/tactical/apowersrc_normal.jpg \
+	data1/models/tactical/hbackupgen.jpg \
+	data1/models/tactical/hbackupgen_normal.jpg \
+	data1/models/tactical/hbomb_fx.tga \
+	data1/models/tactical/hbomb.jpg \
+	data1/models/tactical/hbomb_normal.jpg \
+	data1/models/tactical/hcomputer_fx.tga \
+	data1/models/tactical/hcomputer.jpg \
+	data1/models/tactical/hcomputer_normal.jpg \
+	data1/models/tactical/hlaser_fx.tga \
+	data1/models/tactical/hlaser.jpg \
+	data1/models/tactical/hpowersrc_fx.tga \
+	data1/models/tactical/hpowersrc.jpg \
+	data1/models/tactical/hpowersrc_normal.jpg \
+	data1/models/tactical/human_backupgen.iqm \
+	data1/models/tactical/human_backupgen.skin \
+	data1/models/tactical/human_bomb.iqm \
+	data1/models/tactical/human_bomb.skin \
+	data1/models/tactical/human_computer.iqm \
+	data1/models/tactical/human_computer.skin \
+	data1/models/tactical/human_laser.iqm \
+	data1/models/tactical/human_laser.md2 \
+	data1/models/tactical/human_laser.skin \
+	data1/models/tactical/human_powersrc.iqm \
+	data1/models/tactical/human_powersrc.skin \
+	data1/models/tactical/laser_normal.jpg \
 	data1/models/weapons/g_bfg/tris.md2 \
 	data1/models/weapons/g_chain/tris.md2 \
 	data1/models/weapons/g_hyperb/cover.md2 \
@@ -1317,7 +1399,6 @@ nobase_nodist_pics_DATA = \
 	data1/pics/crosshairs/alien.tga \
 	data1/pics/crosshairs/chexcross.tga \
 	data1/pics/crosshairs/dot1.tga \
-	data1/pics/crosshairs/freezy.tga \
 	data1/pics/crosshairs/hardcorech.tga \
 	data1/pics/crosshairs/havoc2.tga \
 	data1/pics/crosshairs/havoc3.tga \
@@ -1420,6 +1501,7 @@ nobase_nodist_pics_DATA = \
 	data1/pics/i_rocketlauncher.tga \
 	data1/pics/i_score.tga \
 	data1/pics/i_smartgun.tga \
+	data1/pics/i_tactical.tga \
 	data1/pics/i_team1.tga \
 	data1/pics/i_team2.tga \
 	data1/pics/i_vaporizer.tga \
@@ -1461,6 +1543,7 @@ nobase_nodist_pics_DATA = \
 	data1/pics/m_main_quit_fx.tga \
 	data1/pics/m_main_quit_sel.tga \
 	data1/pics/m_main_quit.tga \
+	data1/pics/m_main_tactical.tga \
 	data1/pics/m_main.tga \
 	data1/pics/m_main_video_fx.tga \
 	data1/pics/m_main_video_sel.tga \
@@ -1474,6 +1557,35 @@ nobase_nodist_pics_DATA = \
 	data1/pics/m_startserver.tga \
 	data1/pics/m_tactical.tga \
 	data1/pics/m_video.tga \
+	data1/pics/menu/button_border_end.tga \
+	data1/pics/menu/button_border.tga \
+	data1/pics/menu/dnarrow.tga \
+	data1/pics/menu/field_cursor.tga \
+	data1/pics/menu/icon_border.tga \
+	data1/pics/menu/m_background.tga \
+	data1/pics/menu/m_bottomcorner.tga \
+	data1/pics/menu/m_bottom.tga \
+	data1/pics/menu/midarrow.tga \
+	data1/pics/menu/m_side.tga \
+	data1/pics/menu/m_topcorner.tga \
+	data1/pics/menu/m_top.tga \
+	data1/pics/menu/on.tga \
+	data1/pics/menu/radio_border.tga \
+	data1/pics/menu/scroll_border_end.tga \
+	data1/pics/menu/scroll_border.tga \
+	data1/pics/menu/scroll_cursor_end.tga \
+	data1/pics/menu/scroll_cursor.tga \
+	data1/pics/menu/slide_border_end.tga \
+	data1/pics/menu/slide_border.tga \
+	data1/pics/menu/slide_cursor_end.tga \
+	data1/pics/menu/slide_cursor.tga \
+	data1/pics/menu/sm_background.tga \
+	data1/pics/menu/sm_bottomcorner.tga \
+	data1/pics/menu/sm_bottom.tga \
+	data1/pics/menu/sm_side.tga \
+	data1/pics/menu/sm_topcorner.tga \
+	data1/pics/menu/sm_top.tga \
+	data1/pics/menu/uparrow.tga \
 	data1/pics/net.tga \
 	data1/pics/num_0.tga \
 	data1/pics/num_1.tga \
@@ -2274,6 +2386,7 @@ nobase_nodist_scripts_DATA = \
 	data1/scripts/maps/dm-warmachine2k10.rscript \
 	data1/scripts/maps/dm-zorn2k11.rscript \
 	data1/scripts/maps/dm-zion2k9.rscript \
+	data1/scripts/maps/tac-extermination.rscript \
 	data1/scripts/maps/tca-corrosion.rscript \
 	data1/scripts/maps/tca-cryogenic.rscript \
 	data1/scripts/maps/tca-extermination.rscript \
@@ -2491,6 +2604,8 @@ nobase_nodist_sound_DATA = \
 	data1/sound/vehicles/shootbomb.wav \
 	data1/sound/vehicles/shootlaser.wav \
 	data1/sound/vehicles/warning.wav \
+	data1/sound/weapons/adetonatordown.wav \
+	data1/sound/weapons/adetonatorup.wav \
 	data1/sound/weapons/biglaser.wav \
 	data1/sound/weapons/blastf1a.wav \
 	data1/sound/weapons/clank.wav \
@@ -3220,6 +3335,7 @@ nobase_nodist_textures_DATA = \
 	data1/textures/arena9/biggrate1_hm.tga \
 	data1/textures/arena9/biggrate1_nm.tga \
 	data1/textures/arena9/biggrate1.tga \
+	data1/textures/arena9/blueglass.tga \
 	data1/textures/arena9/boxmetal_hm.tga \
 	data1/textures/arena9/boxmetal_nm.tga \
 	data1/textures/arena9/boxmetal.tga \
@@ -3403,6 +3519,8 @@ nobase_nodist_textures_DATA = \
 	data1/textures/arena9/platefloor8_hm.tga \
 	data1/textures/arena9/platefloor8_nm.tga \
 	data1/textures/arena9/platefloor8.tga \
+	data1/textures/arena9/purpleglass.tga \
+	data1/textures/arena9/redglass.tga \
 	data1/textures/arena9/redtechwall2_hm.tga \
 	data1/textures/arena9/redtechwall2_nm.tga \
 	data1/textures/arena9/redtechwall2.tga \
@@ -3826,6 +3944,7 @@ nobase_nodist_textures_DATA = \
 	data1/textures/rage/support_column_nm.tga \
 	data1/textures/rage/support_column.tga \
 	data1/textures/rage/support_trim.tga \
+	data1/textures/rage/trimlight_blue.tga \
 	data1/textures/rage/trimlight_purple.tga \
 	data1/textures/rage/trimlight_red.tga \
 	data1/textures/rage/wall_blue.tga \
@@ -3904,6 +4023,7 @@ nobase_nodist_vehicles_DATA = \
 	data1/vehicles/deathball/deathball.md2 \
 	data1/vehicles/deathball/deathball.tga \
 	data1/vehicles/deathball/deathmask.tga \
+	data1/vehicles/deathball/skin_fx.tga \
 	data1/vehicles/deathball/skin_normal.tga \
 	data1/vehicles/deathball/skin.tga \
 	data1/vehicles/deathball/v_wep.md2 \
@@ -3936,6 +4056,14 @@ nobase_nodist_graphical_presets_DATA = \
 	data1/graphical_presets/maxquality.cfg 
 
 
+tacticaldir = $(pkgdatadir)
+
+nobase_nodist_tactical_DATA = \
+	tactical/maps.lst \
+	tactical/motd.txt \
+	tactical/default.cfg \
+	tactical/server.cfg
+
 gamedata_files = \
  $(nobase_nodist_env_DATA) \
  $(nobase_nodist_fonts_DATA) \
@@ -3950,5 +4078,6 @@ gamedata_files = \
  $(nobase_nodist_sound_DATA) \
  $(nobase_nodist_textures_DATA) \
  $(nobase_nodist_vehicles_DATA) \
- $(nobase_nodist_graphical_presets_DATA)
+ $(nobase_nodist_graphical_presets_DATA) \
+ $(nobase_nodist_tactical_DATA)
 

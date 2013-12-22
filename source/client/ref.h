@@ -348,26 +348,25 @@ extern	vec3_t	r_origin;
 //cursor - psychospaz
 #define MENU_CURSOR_BUTTON_MAX 2
 
-#define MENUITEM_ACTION		1
-#define MENUITEM_ROTATE		2
-#define MENUITEM_SLIDER		3
-#define MENUITEM_TEXT		4
-#define MENUITEM_VERTSLIDER 5
-
 typedef struct
 {
 	//only 2 buttons for menus
 	float		buttontime[MENU_CURSOR_BUTTON_MAX];
 	int			buttonclicks[MENU_CURSOR_BUTTON_MAX];
-	int			buttonused[MENU_CURSOR_BUTTON_MAX];
+	qboolean	buttonused[MENU_CURSOR_BUTTON_MAX];
 	qboolean	buttondown[MENU_CURSOR_BUTTON_MAX];
 
 	qboolean	mouseaction;
 
 	//this is the active item that cursor is on.
-	int			menuitemtype;
-	void		*menuitem;
-	void		*menu;
+	int			menulayer;
+	struct _tag_menuitem
+				*menuitem;
+	//this is whatever menuitem it was on when a click-and-drag maneuver was
+	//begun.
+	struct _tag_menuitem
+				*click_menuitem;
+	qboolean	suppress_drag; //started clicking with nothing selected
 
 	//coords
 	int		x;
@@ -377,15 +376,18 @@ typedef struct
 	int		oldy;
 } cursor_t;
 
-void	Draw_GetPicSize (int *w, int *h, char *name);
-void	Draw_Pic (int x, int y, char *name);
-void	Draw_ScaledPic (int x, int y, float scale, char *pic);
-void	Draw_StretchPic (int x, int y, int w, int h, char *name);
-void	Draw_AlphaStretchPic (int x, int y, int w, int h, char *name, float alphaval);
-void	Draw_AlphaStretchPlayerIcon (int x, int y, int w, int h, char *pic, float alphaval);
-void	Draw_ScaledChar (float x, float y, int num, float scale, int from_menu);
-void	Draw_ScaledColorChar (float x, float y, int num, vec4_t color, float scale, int from_menu);
-void	Draw_Fill (int x, int y, int w, int h, int c);
+float *RGBA (float r, float g, float b, float a);
+#define RGBA8(a,b,c,d) RGBA((a)/255.0f, (b)/255.0f, (c)/255.0f, (d)/255.0f)
+
+qboolean	Draw_PicExists (const char *name);
+void	Draw_GetPicSize (int *w, int *h, const char *name);
+void	Draw_Pic (float x, float y, const char *name);
+void	Draw_ScaledPic (float x, float y, float scale, const char *pic);
+void	Draw_StretchPic (float x, float y, float w, float h, const char *name);
+void	Draw_AlphaStretchTilingPic (float x, float y, float w, float h, const char *name, float alphaval);
+void	Draw_AlphaStretchPic (float x, float y, float w, float h, const char *name, float alphaval);
+void	Draw_AlphaStretchPlayerIcon (int x, int y, int w, int h, const char *pic, float alphaval);
+void	Draw_Fill (float x, float y, float w, float h, const float rgba[]);
 void	Draw_FadeScreen (void);
 
 void	R_BeginFrame( float camera_separation );
@@ -400,6 +402,7 @@ void	R_SetSky (char *name, float rotate, vec3_t axis);
 
 void	R_RegisterBasePlayerModels(void);
 void	R_RegisterCustomPlayerModels(void);
+void	S_RegisterSoundsForPlayer (char *playername);
 void	R_BeginRegistration (char *map);
 void	R_EndRegistration (void);
 

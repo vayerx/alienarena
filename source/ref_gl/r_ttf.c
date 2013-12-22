@@ -141,6 +141,13 @@ static void _TTF_WrappedPrint(
 		const float *	color
 	);
 
+/* Wrapped printing function */
+static int _TTF_PredictSize(
+		FNT_font_t	font ,
+		const char *	text,
+		qboolean		color
+	);
+
 
 /*****************************************************************************
  * LOCAL VARIABLES                                                           *
@@ -335,7 +342,7 @@ static qboolean _TTF_LoadFont( FNT_font_t font )
 	unsigned int		n_lines;
 	unsigned int		i;
 	unsigned int		texture_height;
-
+	
 	// Load TTF face information
 	error = FT_New_Memory_Face( _TTF_library , faceInt->data , faceInt->size , 0 , &face );
 	if ( error != 0 ) {
@@ -400,8 +407,16 @@ static qboolean _TTF_LoadFont( FNT_font_t font )
 		if ( temp > max_descent )
 			max_descent = temp;
 	}
-	fontInt->height = max_ascent + max_descent;
+	
+	font->height = fontInt->height = max_ascent + max_descent;
+	
+	// FIXME HACK: some fonts (like freemono) disappear if used as the menu
+	// font if we don't do this, because the menu code ends up calculating 
+	// negative margins.
+	if (font->height < font->size)
+		font->height = font->size;
 
+	font->width = 0;
 	// Get kerning information
 	if ( FT_HAS_KERNING( face ) ) {
 		for ( i = 0 ; i < TTF_CHARACTERS ; i ++ ) {
@@ -410,12 +425,17 @@ static qboolean _TTF_LoadFont( FNT_font_t font )
 				FT_Vector kvec;
 				FT_Get_Kerning( face , glyphs[ i ] , glyphs[ j ] , FT_KERNING_DEFAULT , &kvec );
 				fontInt->kerning[ i ][ j ] = kvec.x >> 6;
+				if (fontInt->kerning[i][j] + fontInt->widths[i] > font->width)
+					font->width = fontInt->kerning[i][j] + fontInt->widths[i];
+				if (fontInt->kerning[i][j] + fontInt->widths[j] > font->width)
+					font->width = fontInt->kerning[i][j] + fontInt->widths[j];
 			}
 		}
 	} else {
+		font->width = font->size;
 		memset( fontInt->kerning , 0 , sizeof( fontInt->kerning ) );
 	}
-
+	
 	// Compute texture height
 	texture_height = ( max_ascent + max_descent) * n_lines;
 	for ( i = 16 ; i <= 4096 ; i <<= 1 ) {
@@ -622,6 +642,7 @@ static qboolean _TTF_GetFont( FNT_font_t font )
 	font->RawPrint = _TTF_RawPrint;
 	font->BoundedPrint = _TTF_BoundedPrint;
 	font->WrappedPrint = _TTF_WrappedPrint;
+	font->PredictSize = _TTF_PredictSize;
 	font->Destroy = _TTF_Destroy;
 	return true;
 }
@@ -686,6 +707,9 @@ static void _TTF_RawPrintInternal(
 	const unsigned char *	ptr = ( const unsigned char *) text;
 	int			ptrInc = r2l ? -1 : 1;
 	int			previous = -1;
+	
+	if (r2l)
+		ptr += text_length-1;
 
 	while ( text_length ) {
 		unsigned int	i = ( *ptr & 0x7F ) - ' ';
@@ -1274,4 +1298,56 @@ static void _TTF_WrappedPrint(
 	_TTF_PrepareToDraw( fInternal->texture );
 	_TTF_WrappedPrintInternal( fInternal , text , cmode , align , indent , box , color );
 	_TTF_RestoreEnvironment( );
+}
+
+
+/*
+ * Size prediction function
+ */
+static int _TTF_PredictSize(
+		FNT_font_t	font ,
+		const char *	text,
+		qboolean		color
+	)
+{
+	_TTF_font_t				fInternal;
+	float					tx;
+	int						ret;
+	unsigned int			previous;
+	const unsigned char *	ptr;
+	
+	fInternal = (_TTF_font_t) font->internal;
+	ptr = ( const unsigned char *) text;
+	
+	if (*ptr == '\0')
+		return 0;
+	
+	if (*ptr == '^' && color)
+		ptr += 2;
+	
+	previous = ( *ptr & 0x7F ) - ' ';
+	
+	tx = fInternal->widths[ previous ];
+	
+	while ( *(++ptr) ) {
+		unsigned int	i = ( *ptr & 0x7F ) - ' ';
+		
+		if (*ptr == '^' && color)
+		{
+			ptr++;
+			continue;
+		}
+
+		if ( i < TTF_CHARACTERS ) {
+			tx += fInternal->kerning[ previous ][ i ] + fInternal->widths[ i ];
+			previous = i;
+		}
+	}
+	
+	// always round up the pixel count
+	ret = (int)tx;
+	if (ret < tx)
+		ret++;
+	
+	return ret;
 }
